@@ -1,0 +1,10 @@
+[
+  {
+    "id": "example_item",
+    "name": "Example drawing",
+    "keywords": ["example", "test"],
+    "png": "png/example.png",
+    "dwg": "dwg/example.dwg",
+    "updated": "2026-01-15"
+  }
+]
