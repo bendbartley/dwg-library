@@ -137,16 +137,21 @@
       cursor:grab;
     }
     .previewViewport.dragging{ cursor:grabbing; }
+
+    /* Key change: stage sits at viewport centre; rotation origin is image centre */
     .previewStage{
       position:absolute;
-      left:0;
-      top:0;
-      transform-origin: 0 0;
+      left:50%;
+      top:50%;
+      transform-origin:center center;
       will-change: transform;
     }
     .previewImage{
       display:block;
       pointer-events:none;
+      user-select:none;
+      /* anchor image centre to stage centre */
+      transform: translate(-50%, -50%);
     }
 
     .footerBar{display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:space-between; margin-top:10px;}
@@ -241,6 +246,7 @@
         <button id="zoomOutBtn" class="secondary mini">−</button>
         <button id="zoomInBtn" class="secondary mini">+</button>
         <button id="centerBtn" class="secondary mini">Center</button>
+        <button id="fitBtn" class="secondary mini">Fit</button>
         <button id="resetViewBtn" class="secondary mini">Reset</button>
         <button id="rotLeftBtn" class="secondary mini">⟲ 90°</button>
         <button id="rotRightBtn" class="secondary mini">⟳ 90°</button>
@@ -317,7 +323,7 @@
 (() => {
   // -------------------- IndexedDB wrapper --------------------
   const DB_NAME = "DwgLibraryDb";
-  const DB_VER = 3; // bmp -> png
+  const DB_VER = 3;
   const STORE = "items";
 
   function openDb(){
@@ -409,6 +415,7 @@
   const zoomInBtn = document.getElementById("zoomInBtn");
   const zoomOutBtn = document.getElementById("zoomOutBtn");
   const centerBtn = document.getElementById("centerBtn");
+  const fitBtn = document.getElementById("fitBtn");
   const resetViewBtn = document.getElementById("resetViewBtn");
   const rotLeftBtn = document.getElementById("rotLeftBtn");
   const rotRightBtn = document.getElementById("rotRightBtn");
@@ -418,14 +425,14 @@
   let activeId = null;
   let activeBlobUrls = [];
 
-  // -------- Viewer state (pan/zoom/rotate) --------
+  // -------- Viewer state (centre-origin) --------
   let view = {
     scale: 1,
     minScale: 0.05,
     maxScale: 20,
-    tx: 0,
+    tx: 0,     // translation relative to stage anchor at viewport centre
     ty: 0,
-    rot: 0, // degrees
+    rot: 0,
     imgW: 0,
     imgH: 0
   };
@@ -440,6 +447,7 @@
 
   function applyTransform(){
     if (!stageEl) return;
+    // stage is anchored at viewport centre (50%/50%)
     stageEl.style.transform = `translate(${view.tx}px, ${view.ty}px) rotate(${view.rot}deg) scale(${view.scale})`;
   }
 
@@ -453,9 +461,15 @@
     };
   }
 
-  // Correct fit: accounts for rotation by fitting rotated bounding box
+  function centerView(){
+    view.tx = 0;
+    view.ty = 0;
+    applyTransform();
+  }
+
   function fitToViewport(){
     if (!viewportEl || !currentImgEl) return;
+
     const vw = viewportEl.clientWidth;
     const vh = viewportEl.clientHeight;
 
@@ -467,27 +481,16 @@
     const s = Math.min(vw / rb.w, vh / rb.h) * 0.98;
     view.scale = clamp(s, view.minScale, view.maxScale);
 
-    view.tx = (vw - rb.w * view.scale) / 2;
-    view.ty = (vh - rb.h * view.scale) / 2;
+    // keep centred
+    view.tx = 0;
+    view.ty = 0;
 
     applyTransform();
   }
 
-  // Correct center: accounts for rotation, keeps current scale/rotation
-  function centerView(){
-    if (!viewportEl || !currentImgEl) return;
-    const vw = viewportEl.clientWidth;
-    const vh = viewportEl.clientHeight;
-
-    const iw = view.imgW || currentImgEl.naturalWidth || 1;
-    const ih = view.imgH || currentImgEl.naturalHeight || 1;
-
-    const rb = rotatedBounds(iw, ih, view.rot);
-
-    view.tx = (vw - rb.w * view.scale) / 2;
-    view.ty = (vh - rb.h * view.scale) / 2;
-
-    applyTransform();
+  function resetView(){
+    view.rot = 0;
+    fitToViewport();
   }
 
   function zoomAt(clientX, clientY, factor){
@@ -497,28 +500,30 @@
     const px = clientX - rect.left;
     const py = clientY - rect.top;
 
+    const cx = rect.width / 2;
+    const cy = rect.height / 2;
+
     const oldScale = view.scale;
     const newScale = clamp(oldScale * factor, view.minScale, view.maxScale);
     if (newScale === oldScale) return;
 
-    // Keep point under cursor stationary (approx, ignores rotation coupling)
-    view.tx = px - (px - view.tx) * (newScale / oldScale);
-    view.ty = py - (py - view.ty) * (newScale / oldScale);
-    view.scale = newScale;
+    // Cursor position relative to viewport centre
+    const dx = px - cx;
+    const dy = py - cy;
 
+    // Keep point under cursor stable (screen space)
+    view.tx = dx + (view.tx - dx) * (newScale / oldScale);
+    view.ty = dy + (view.ty - dy) * (newScale / oldScale);
+
+    view.scale = newScale;
     applyTransform();
   }
 
   function setRotation(deg){
     view.rot = ((deg % 360) + 360) % 360;
     if (view.rot > 180) view.rot -= 360;
-    // After rotation, keep things centered (people expect this)
-    centerView();
-  }
-
-  function resetView(){
-    view.rot = 0;
-    fitToViewport();
+    // Rotation about centre, so no drift. Fit remains correct if you choose it.
+    applyTransform();
   }
 
   function wireViewerInteractions(viewport){
@@ -560,8 +565,9 @@
     }, { passive:false });
 
     const ro = new ResizeObserver(() => {
-      // When viewport changes size, just re-center to avoid drift
-      centerView();
+      // Keep stable on resize: just re-fit (or you can keep scale and just center)
+      // Safer default for usability:
+      fitToViewport();
     });
     ro.observe(viewport);
   }
@@ -953,6 +959,7 @@
   });
 
   centerBtn?.addEventListener("click", () => centerView());
+  fitBtn?.addEventListener("click", () => fitToViewport());
   resetViewBtn?.addEventListener("click", () => resetView());
 
   rotLeftBtn?.addEventListener("click", () => setRotation(view.rot - 90));
