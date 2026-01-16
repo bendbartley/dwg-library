@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>DWG Library (JSON + R2 Viewer)</title>
+  <title>DWG Library: Upload + Keyword Search + PNG Preview</title>
   <style>
     :root{
       --bg:#0b0d10; --panel:#12161c; --panel2:#0f1318;
@@ -85,7 +85,7 @@
     .rmeta{font-size:12px; color:var(--muted); margin-top:2px; display:flex; gap:10px; flex-wrap:wrap;}
     .kwwrap{display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;}
     .kw{
-      display:inline-flex; align-items:center;
+      display:inline-flex; align-items:center; gap:8px;
       padding:6px 10px;
       border-radius:999px;
       border:1px solid rgba(110,231,255,.22);
@@ -93,13 +93,19 @@
       font-size:12px;
       user-select:none;
     }
+    .kw button{
+      padding:0 6px;
+      border-radius:8px;
+      border:1px solid rgba(255,110,110,.25);
+      background:rgba(255,110,110,.08);
+      color:var(--text);
+    }
     .viewer{min-height: calc(100vh - 66px); padding:14px;}
     .viewer .card{height:100%;}
     .viewerHeader{display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap;}
     .fileTitle{font-size:14px; font-weight:700;}
     .notice{padding:10px; border-radius:10px; border:1px solid rgba(255,110,110,.35); background:rgba(255,110,110,.06); color:var(--text); font-size:12px; line-height:1.4;}
     .ok{border-color: rgba(110,231,255,.35); background: rgba(110,231,255,.06);}
-
     .previewBox{
       border:1px solid rgba(36,48,64,.85);
       border-radius:12px;
@@ -108,7 +114,7 @@
       margin-top:10px;
     }
 
-    /* Viewer controls */
+    /* Image viewer */
     .viewerControls{
       display:flex;
       gap:8px;
@@ -120,8 +126,6 @@
       padding:8px 10px;
       font-size:12px;
     }
-
-    /* Viewport and stage */
     .previewViewport{
       width:100%;
       height: calc(100vh - 240px);
@@ -133,27 +137,46 @@
       cursor:grab;
     }
     .previewViewport.dragging{ cursor:grabbing; }
-
-    /* We anchor stage at viewport center and rotate around image center */
     .previewStage{
       position:absolute;
-      left:50%;
-      top:50%;
-      transform-origin: 50% 50%;
+      left:0;
+      top:0;
+      transform-origin: 0 0;
       will-change: transform;
     }
     .previewImage{
       display:block;
       pointer-events:none;
-      user-select:none;
     }
 
     .footerBar{display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:space-between; margin-top:10px;}
 
+    /* Modal */
+    .modalBackdrop{
+      position:fixed; inset:0;
+      background:rgba(0,0,0,.55);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      padding:16px;
+      z-index:999;
+    }
+    .modal{
+      width:min(680px, 100%);
+      border:1px solid var(--border);
+      border-radius:14px;
+      background:linear-gradient(180deg, rgba(18,22,28,.96), rgba(15,19,24,.96));
+      box-shadow: 0 20px 80px rgba(0,0,0,.55);
+      padding:14px;
+    }
+    .grid2{display:grid; grid-template-columns: 1fr 1fr; gap:10px;}
+    .grid1{display:grid; grid-template-columns: 1fr; gap:10px;}
+    label{font-size:12px; color:var(--muted); display:block; margin-bottom:6px;}
     @media (max-width: 980px){
       .wrap{grid-template-columns: 1fr;}
       .left{border-right:none; border-bottom:1px solid var(--border);}
       .previewViewport{height:60vh;}
+      .grid2{grid-template-columns:1fr;}
     }
   </style>
 </head>
@@ -161,12 +184,13 @@
 <header>
   <div class="row">
     <div>
-      <h1>DWG Library (JSON + R2)</h1>
-      <div class="sub">Metadata: GitHub Pages JSON. Files: Cloudflare R2. No IndexedDB. No mystery bugs.</div>
+      <h1>DWG Library (Local Upload DB)</h1>
+      <div class="sub">Uploads stored in IndexedDB. PNG preview. DWG download.</div>
     </div>
     <div class="btnrow">
-      <button id="requestNewBtn" class="secondary" title="Email a request to add a new item">Request new item</button>
-      <button id="reloadBtn" class="secondary" title="Reload library.json">Reload</button>
+      <button id="addItemBtn">Add item</button>
+      <button id="exportBtn" class="secondary" title="Export metadata (not files) as JSON">Export JSON</button>
+      <button id="wipeBtn" class="danger" title="Deletes everything from the local database">Wipe DB</button>
     </div>
   </div>
 </header>
@@ -176,7 +200,7 @@
     <div class="pane">
       <div class="card stack">
         <div class="small">
-          Shared library loaded from <code>library.json</code>. Search by name/keywords.
+          This DB lives in your browser (IndexedDB). Other PCs/browsers do not see it.
         </div>
 
         <div class="stack">
@@ -188,6 +212,7 @@
 
         <div class="small" id="statusLine">Loading…</div>
         <div class="results" id="results"></div>
+
         <div class="small" id="countLine"></div>
       </div>
     </div>
@@ -202,7 +227,7 @@
         </div>
         <div class="btnrow">
           <button id="downloadDwgBtn" style="display:none;">Download DWG</button>
-          <button id="requestEditBtn" class="secondary" style="display:none;">Request edit</button>
+          <button id="deleteItemBtn" class="danger" style="display:none;">Delete item</button>
         </div>
       </div>
 
@@ -216,7 +241,7 @@
         <button id="zoomOutBtn" class="secondary mini">−</button>
         <button id="zoomInBtn" class="secondary mini">+</button>
         <button id="centerBtn" class="secondary mini">Center</button>
-        <button id="fitBtn" class="secondary mini">Fit</button>
+        <button id="resetViewBtn" class="secondary mini">Reset</button>
         <button id="rotLeftBtn" class="secondary mini">⟲ 90°</button>
         <button id="rotRightBtn" class="secondary mini">⟳ 90°</button>
       </div>
@@ -226,209 +251,274 @@
           <div class="small"><b>Keywords</b></div>
           <div class="kwwrap" id="kwWrap"></div>
         </div>
+        <div class="btnrow">
+          <input id="kwInput" placeholder="Add keyword (press Enter)" />
+          <button id="addKwBtn">Add</button>
+        </div>
 
         <div id="warn" class="notice" style="display:none;"></div>
         <div id="info" class="notice ok" style="display:none;"></div>
       </div>
 
       <div class="footerBar">
-        <div class="small">Tip: mouse wheel zooms at cursor. Drag pans. Rotation is about the image centre.</div>
-        <div class="small">Edits go via email request (viewer stays read-only).</div>
+        <div class="small">PNG preview is simple and reliable. Shocking.</div>
+        <div class="small">Shared DB + write-to-folder still needs a backend.</div>
       </div>
     </div>
   </main>
 </div>
 
+<!-- Add Item Modal -->
+<div class="modalBackdrop" id="modalBackdrop">
+  <div class="modal">
+    <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;">
+      <div>
+        <div class="fileTitle">Add item</div>
+        <div class="small">Requires DWG (download) and PNG (preview).</div>
+      </div>
+      <div class="btnrow">
+        <button id="closeModalBtn" class="secondary">Cancel</button>
+        <button id="saveItemBtn">Save item</button>
+      </div>
+    </div>
+
+    <div class="grid2" style="margin-top:10px;">
+      <div>
+        <label>Name</label>
+        <input id="nameInput" placeholder="e.g. Planter retaining wall" />
+      </div>
+      <div>
+        <label>Initial keywords (comma or space separated)</label>
+        <input id="keywordsInput" placeholder="masonry, planter, retaining" />
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div>
+        <label>DWG file</label>
+        <input id="dwgFile" type="file" accept=".dwg" />
+      </div>
+      <div>
+        <label>PNG preview file</label>
+        <input id="pngFile" type="file" accept=".png,image/png" />
+      </div>
+    </div>
+
+    <div class="grid1">
+      <div class="small" id="modalMsg" style="color:var(--muted);"></div>
+      <div class="small">
+        Stored in IndexedDB (local to this browser). Clearing site data deletes it.
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 (() => {
-  // ===================== CONFIG =====================
-  // Point this at your GitHub Pages copy of library.json (NOT the github.com/blob URL).
-  // Example: https://bendbartley.github.io/dwg-library/library.json
-  const LIBRARY_JSON_URL = "https://bendbartley.github.io/dwg-library/library.json";
+  // -------------------- IndexedDB wrapper --------------------
+  const DB_NAME = "DwgLibraryDb";
+  const DB_VER = 3; // bmp -> png
+  const STORE = "items";
 
-  // Where email requests go
-  const REQUEST_EMAIL_TO = ""; // e.g. "you@domain.com" (leave blank to let user pick)
+  function openDb(){
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, DB_VER);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(STORE)){
+          db.createObjectStore(STORE, { keyPath: "id" });
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
 
-  // ===================== UI =====================
+  async function withStore(mode, fn){
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, mode);
+      const store = tx.objectStore(STORE);
+      fn(store);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+  }
+
+  function id(){
+    return (crypto?.randomUUID?.() || (Date.now().toString(16) + Math.random().toString(16).slice(2)));
+  }
+
+  async function putItem(item){ await withStore("readwrite", (s) => s.put(item)); }
+
+  async function getItem(itemId){
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, "readonly");
+      const req = tx.objectStore(STORE).get(itemId);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function getAllItems(){
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, "readonly");
+      const req = tx.objectStore(STORE).getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function deleteItem(itemId){ await withStore("readwrite", (s) => s.delete(itemId)); }
+  async function wipeDb(){ await withStore("readwrite", (s) => s.clear()); }
+
+  // -------------------- UI --------------------
   const resultsEl = document.getElementById("results");
   const statusLine = document.getElementById("statusLine");
   const countLine = document.getElementById("countLine");
   const searchBox = document.getElementById("searchBox");
   const resetBtn = document.getElementById("resetBtn");
-  const reloadBtn = document.getElementById("reloadBtn");
 
   const titleEl = document.getElementById("title");
   const metaEl = document.getElementById("meta");
   const previewHost = document.getElementById("previewHost");
   const kwWrap = document.getElementById("kwWrap");
+  const kwInput = document.getElementById("kwInput");
+  const addKwBtn = document.getElementById("addKwBtn");
   const warnEl = document.getElementById("warn");
   const infoEl = document.getElementById("info");
-
   const downloadDwgBtn = document.getElementById("downloadDwgBtn");
-  const requestEditBtn = document.getElementById("requestEditBtn");
-  const requestNewBtn = document.getElementById("requestNewBtn");
+  const deleteItemBtn = document.getElementById("deleteItemBtn");
+
+  const addItemBtn = document.getElementById("addItemBtn");
+  const exportBtn = document.getElementById("exportBtn");
+  const wipeBtn = document.getElementById("wipeBtn");
+
+  const modalBackdrop = document.getElementById("modalBackdrop");
+  const closeModalBtn = document.getElementById("closeModalBtn");
+  const saveItemBtn = document.getElementById("saveItemBtn");
+  const nameInput = document.getElementById("nameInput");
+  const keywordsInput = document.getElementById("keywordsInput");
+  const dwgFile = document.getElementById("dwgFile");
+  const pngFile = document.getElementById("pngFile");
+  const modalMsg = document.getElementById("modalMsg");
 
   const zoomInBtn = document.getElementById("zoomInBtn");
   const zoomOutBtn = document.getElementById("zoomOutBtn");
   const centerBtn = document.getElementById("centerBtn");
-  const fitBtn = document.getElementById("fitBtn");
+  const resetViewBtn = document.getElementById("resetViewBtn");
   const rotLeftBtn = document.getElementById("rotLeftBtn");
   const rotRightBtn = document.getElementById("rotRightBtn");
 
-  // ===================== STATE =====================
   let items = [];
   let filtered = [];
   let activeId = null;
+  let activeBlobUrls = [];
 
-  // Viewer elements
-  let viewportEl = null;
-  let stageEl = null;
-  let imgEl = null;
-
-  // Transform state (rotation about image centre)
-  const view = {
+  // -------- Viewer state (pan/zoom/rotate) --------
+  let view = {
     scale: 1,
     minScale: 0.05,
     maxScale: 20,
-    tx: 0,   // pan in screen px
+    tx: 0,
     ty: 0,
-    rot: 0,  // degrees
+    rot: 0, // degrees
     imgW: 0,
     imgH: 0
   };
 
-  const drag = { active:false, startX:0, startY:0, startTx:0, startTy:0 };
+  let viewportEl = null;
+  let stageEl = null;
+  let currentImgEl = null;
 
-  // ===================== HELPERS =====================
-  function escapeHtml(s){
-    return (s ?? "").toString()
-      .replaceAll("&","&amp;")
-      .replaceAll("<","&lt;")
-      .replaceAll(">","&gt;")
-      .replaceAll('"',"&quot;")
-      .replaceAll("'","&#039;");
-  }
-
-  function norm(s){ return (s ?? "").toString().trim().toLowerCase(); }
-
-  function showWarn(msg){
-    warnEl.style.display = "block";
-    warnEl.textContent = msg;
-  }
-  function hideWarn(){ warnEl.style.display = "none"; }
-
-  function showInfo(msg){
-    infoEl.style.display = "block";
-    infoEl.textContent = msg;
-  }
-  function hideInfo(){ infoEl.style.display = "none"; }
-
-  function clearPreview(text){
-    previewHost.innerHTML = "";
-    previewHost.style.display = "flex";
-    previewHost.style.alignItems = "center";
-    previewHost.style.justifyContent = "center";
-    previewHost.style.color = "#667";
-    previewHost.textContent = text || "";
-    viewportEl = null;
-    stageEl = null;
-    imgEl = null;
-  }
-
-  function setPreviewElement(el){
-    previewHost.innerHTML = "";
-    previewHost.style.display = "block";
-    previewHost.style.color = "inherit";
-    previewHost.appendChild(el);
-  }
+  let drag = { active:false, startX:0, startY:0, startTx:0, startTy:0 };
 
   function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+
+  function applyTransform(){
+    if (!stageEl) return;
+    stageEl.style.transform = `translate(${view.tx}px, ${view.ty}px) rotate(${view.rot}deg) scale(${view.scale})`;
+  }
 
   function rotatedBounds(iw, ih, rotDeg){
     const rad = rotDeg * Math.PI / 180;
     const cos = Math.abs(Math.cos(rad));
     const sin = Math.abs(Math.sin(rad));
-    return { w: iw * cos + ih * sin, h: iw * sin + ih * cos };
+    return {
+      w: iw * cos + ih * sin,
+      h: iw * sin + ih * cos
+    };
   }
 
-  function applyTransform(){
-    if (!stageEl) return;
-    // Stage is anchored at viewport centre (left/top 50%), so:
-    // - base translate(-50%, -50%) keeps stage origin at centre
-    // - then pan translate(tx, ty)
-    // - then rotate+scale about image centre via transform-origin 50% 50%
-    stageEl.style.transform =
-      `translate(-50%, -50%) translate(${view.tx}px, ${view.ty}px) rotate(${view.rot}deg) scale(${view.scale})`;
-  }
-
+  // Correct fit: accounts for rotation by fitting rotated bounding box
   function fitToViewport(){
-    if (!viewportEl || !imgEl) return;
+    if (!viewportEl || !currentImgEl) return;
     const vw = viewportEl.clientWidth;
     const vh = viewportEl.clientHeight;
 
-    const iw = view.imgW || imgEl.naturalWidth || 1;
-    const ih = view.imgH || imgEl.naturalHeight || 1;
+    const iw = view.imgW || currentImgEl.naturalWidth || 1;
+    const ih = view.imgH || currentImgEl.naturalHeight || 1;
 
     const rb = rotatedBounds(iw, ih, view.rot);
+
     const s = Math.min(vw / rb.w, vh / rb.h) * 0.98;
-
     view.scale = clamp(s, view.minScale, view.maxScale);
-    view.tx = 0;
-    view.ty = 0;
+
+    view.tx = (vw - rb.w * view.scale) / 2;
+    view.ty = (vh - rb.h * view.scale) / 2;
+
     applyTransform();
   }
 
+  // Correct center: accounts for rotation, keeps current scale/rotation
   function centerView(){
-    // Because stage is centered, "center" is literally pan = 0,0
-    view.tx = 0;
-    view.ty = 0;
+    if (!viewportEl || !currentImgEl) return;
+    const vw = viewportEl.clientWidth;
+    const vh = viewportEl.clientHeight;
+
+    const iw = view.imgW || currentImgEl.naturalWidth || 1;
+    const ih = view.imgH || currentImgEl.naturalHeight || 1;
+
+    const rb = rotatedBounds(iw, ih, view.rot);
+
+    view.tx = (vw - rb.w * view.scale) / 2;
+    view.ty = (vh - rb.h * view.scale) / 2;
+
     applyTransform();
   }
 
-  function setRotation(deg){
-    let r = ((deg % 360) + 360) % 360;
-    if (r > 180) r -= 360;
-    view.rot = r;
-    // keep view centered on rotate (what humans expect)
-    centerView();
-    // optional: if you prefer rotate to keep fit, swap this:
-    // fitToViewport();
-  }
-
-  // Zoom-at-cursor with rotation-aware math
   function zoomAt(clientX, clientY, factor){
     if (!viewportEl) return;
 
     const rect = viewportEl.getBoundingClientRect();
-    const cx = rect.left + rect.width/2;
-    const cy = rect.top + rect.height/2;
+    const px = clientX - rect.left;
+    const py = clientY - rect.top;
 
     const oldScale = view.scale;
     const newScale = clamp(oldScale * factor, view.minScale, view.maxScale);
     if (newScale === oldScale) return;
 
-    // Cursor position relative to viewport centre, after pan
-    const dx = (clientX - cx) - view.tx;
-    const dy = (clientY - cy) - view.ty;
-
-    // Convert screen delta to local (image-centred) coordinates
-    const rad = view.rot * Math.PI / 180;
-    const cos = Math.cos(rad);
-    const sin = Math.sin(rad);
-
-    // Apply inverse rotation then inverse scale
-    const lx = ( cos*dx + sin*dy) / oldScale;
-    const ly = (-sin*dx + cos*dy) / oldScale;
-
-    // Now compute new pan so that local point maps back to cursor under new scale
-    const ndx = (cos*lx - sin*ly) * newScale;
-    const ndy = (sin*lx + cos*ly) * newScale;
-
-    view.tx = (clientX - cx) - ndx;
-    view.ty = (clientY - cy) - ndy;
+    // Keep point under cursor stationary (approx, ignores rotation coupling)
+    view.tx = px - (px - view.tx) * (newScale / oldScale);
+    view.ty = py - (py - view.ty) * (newScale / oldScale);
     view.scale = newScale;
 
     applyTransform();
+  }
+
+  function setRotation(deg){
+    view.rot = ((deg % 360) + 360) % 360;
+    if (view.rot > 180) view.rot -= 360;
+    // After rotation, keep things centered (people expect this)
+    centerView();
+  }
+
+  function resetView(){
+    view.rot = 0;
+    fitToViewport();
   }
 
   function wireViewerInteractions(viewport){
@@ -457,6 +547,7 @@
       viewport.classList.remove("dragging");
       try{ viewport.releasePointerCapture(e.pointerId); } catch {}
     };
+
     viewport.onpointercancel = () => {
       drag.active = false;
       viewport.classList.remove("dragging");
@@ -469,20 +560,67 @@
     }, { passive:false });
 
     const ro = new ResizeObserver(() => {
-      // Keep current view, but avoid drift when viewport changes
-      // (centering pan is safe, doesn't trash zoom/rot)
+      // When viewport changes size, just re-center to avoid drift
       centerView();
     });
     ro.observe(viewport);
   }
 
-  function mailto(subject, body){
-    const to = REQUEST_EMAIL_TO || "";
-    const url = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    window.location.href = url;
+  // -------------------- Helpers --------------------
+  function norm(s){ return (s ?? "").toString().trim().toLowerCase(); }
+
+  function tokenizeKeywords(s){
+    return (s ?? "")
+      .toString()
+      .split(/[,]+|\s+/)
+      .map(norm)
+      .filter(Boolean);
   }
 
-  // ===================== LIST + SEARCH =====================
+  function showWarn(msg){
+    warnEl.style.display = "block";
+    warnEl.textContent = msg;
+  }
+  function hideWarn(){ warnEl.style.display = "none"; }
+
+  function showInfo(msg){
+    infoEl.style.display = "block";
+    infoEl.textContent = msg;
+  }
+  function hideInfo(){ infoEl.style.display = "none"; }
+
+  function clearPreview(text){
+    previewHost.innerHTML = "";
+    previewHost.style.display = "flex";
+    previewHost.style.alignItems = "center";
+    previewHost.style.justifyContent = "center";
+    previewHost.style.color = "#667";
+    previewHost.textContent = text || "";
+    viewportEl = null; stageEl = null; currentImgEl = null;
+  }
+
+  function setPreviewElement(el){
+    previewHost.innerHTML = "";
+    previewHost.style.display = "block";
+    previewHost.style.color = "inherit";
+    previewHost.appendChild(el);
+  }
+
+  function cleanupBlobUrls(){
+    for (const u of activeBlobUrls) URL.revokeObjectURL(u);
+    activeBlobUrls = [];
+  }
+
+  function escapeHtml(s){
+    return (s ?? "").toString()
+      .replaceAll("&","&amp;")
+      .replaceAll("<","&lt;")
+      .replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;")
+      .replaceAll("'","&#039;");
+  }
+
+  // -------------------- Search + list --------------------
   function applyFilter(){
     const q = norm(searchBox.value);
     const tokens = q.split(/\s+/).filter(Boolean);
@@ -492,10 +630,10 @@
     } else {
       filtered = items
         .map(it => {
-          const hay = ((it.name||"") + " " + (it.keywords||[]).join(" ")).toLowerCase();
+          const hay = (it.name + " " + (it.keywords||[]).join(" ")).toLowerCase();
           let score = 0;
           for (const t of tokens){
-            if ((it.keywords||[]).some(k => (k||"").toLowerCase().includes(t))) score += 3;
+            if ((it.keywords||[]).some(k => k.includes(t))) score += 3;
             if (hay.includes(t)) score += 1;
           }
           return { it, score };
@@ -537,109 +675,120 @@
     }
   }
 
+  // -------------------- Load + render selection --------------------
+  async function refresh(){
+    statusLine.textContent = "Loading local database…";
+    items = await getAllItems();
+    items = items.map(it => ({
+      ...it,
+      keywords: Array.from(new Set((it.keywords||[]).map(norm).filter(Boolean))).sort()
+    }));
+    statusLine.textContent = `Loaded ${items.length} items`;
+    applyFilter();
+
+    if (!activeId && items.length){
+      await selectItem(items[0].id);
+    }
+    if (items.length === 0){
+      activeId = null;
+      titleEl.textContent = "No item selected";
+      metaEl.textContent = "";
+      downloadDwgBtn.style.display = "none";
+      deleteItemBtn.style.display = "none";
+      kwWrap.innerHTML = "";
+      clearPreview("Add an item to begin.");
+    }
+  }
+
   function renderKeywords(it){
     kwWrap.innerHTML = "";
     const kws = it.keywords || [];
     if (kws.length === 0){
       const s = document.createElement("div");
       s.className = "small";
-      s.textContent = "No keywords.";
+      s.textContent = "No keywords yet. Add one.";
       kwWrap.appendChild(s);
       return;
     }
+
     for (const k of kws){
       const chip = document.createElement("div");
       chip.className = "kw";
-      chip.textContent = k;
+      chip.innerHTML = `<span>${escapeHtml(k)}</span>`;
+      const del = document.createElement("button");
+      del.type = "button";
+      del.textContent = "×";
+      del.title = "Remove keyword";
+      del.addEventListener("click", async () => {
+        const next = (it.keywords || []).filter(x => x !== k);
+        it.keywords = next;
+        await putItem(it);
+        await refresh();
+        await selectItem(it.id);
+      });
+      chip.appendChild(del);
       kwWrap.appendChild(chip);
     }
   }
 
-  // ===================== DATA LOAD =====================
-  async function loadLibrary(){
-    hideWarn(); hideInfo();
-    statusLine.textContent = "Loading library.json…";
+  async function addKeyword(){
+    if (!activeId) return;
+    const k = norm(kwInput.value);
+    if (!k) return;
 
-    const res = await fetch(LIBRARY_JSON_URL, { cache: "no-store" });
-    if (!res.ok){
-      throw new Error(`library.json fetch failed (${res.status}). Make sure you're using the GitHub Pages URL, not github.com/blob.`);
-    }
+    const it = await getItem(activeId);
+    if (!it) return;
 
-    const data = await res.json();
-    if (!Array.isArray(data)){
-      throw new Error("library.json must be an array at top-level.");
-    }
-
-    // Normalize and keep only sane rows
-    items = data
-      .filter(x => x && typeof x === "object")
-      .map(x => ({
-        id: (x.id ?? "").toString(),
-        name: (x.name ?? "Untitled").toString(),
-        keywords: Array.isArray(x.keywords) ? x.keywords.map(k => (k ?? "").toString()).filter(Boolean) : [],
-        pngUrl: (x.pngUrl ?? "").toString(),
-        dwgUrl: (x.dwgUrl ?? "").toString(),
-        updatedUtc: (x.updatedUtc ?? "").toString()
-      }))
-      .filter(x => x.id && x.pngUrl && x.dwgUrl);
-
-    statusLine.textContent = `Loaded ${items.length} items`;
-    activeId = null;
-    applyFilter();
-
-    if (items.length){
-      await selectItem(items[0].id);
-    } else {
-      titleEl.textContent = "No item selected";
-      metaEl.textContent = "";
-      downloadDwgBtn.style.display = "none";
-      requestEditBtn.style.display = "none";
-      kwWrap.innerHTML = "";
-      clearPreview("No items in library.json (or missing urls).");
-    }
+    it.keywords = Array.from(new Set([...(it.keywords||[]), k])).sort();
+    await putItem(it);
+    kwInput.value = "";
+    await refresh();
+    await selectItem(it.id);
   }
 
-  async function selectItem(id){
+  async function selectItem(itemId){
     hideWarn(); hideInfo();
+    cleanupBlobUrls();
 
-    const it = items.find(x => x.id === id);
+    activeId = itemId;
+    renderResults();
+
+    const it = await getItem(itemId);
     if (!it){
-      showWarn("Item not found in loaded list.");
+      showWarn("Item missing. Your DB is inconsistent.");
       return;
     }
 
-    activeId = id;
-    renderResults();
-
     titleEl.textContent = it.name || "Untitled";
     metaEl.textContent =
-      `PNG: ${it.pngUrl} | DWG: ${it.dwgUrl}` + (it.updatedUtc ? ` | Updated: ${new Date(it.updatedUtc).toLocaleString()}` : "");
+      `DWG: ${it.dwgName || "dwg"} | PNG: ${it.pngName || "png"} | Added: ${new Date(it.createdUtc).toLocaleString()}`;
 
+    deleteItemBtn.style.display = "inline-block";
     downloadDwgBtn.style.display = "inline-block";
-    requestEditBtn.style.display = "inline-block";
-    downloadDwgBtn.onclick = () => window.open(it.dwgUrl, "_blank", "noopener");
-
-    requestEditBtn.onclick = () => {
-      const subject = `DWG Library edit request: ${it.name} (${it.id})`;
-      const body =
-`Item:
-- id: ${it.id}
-- name: ${it.name}
-- pngUrl: ${it.pngUrl}
-- dwgUrl: ${it.dwgUrl}
-- keywords: ${(it.keywords||[]).join(", ")}
-
-Request (describe what you want changed):
-- `;
-      mailto(subject, body);
-    };
 
     renderKeywords(it);
-    await previewPngUrl(it.pngUrl, it.name);
+    previewPngBlob(it.pngBlob, it.pngName);
+    setupDownload(it.dwgBlob, it.dwgName || (it.name || "drawing") + ".dwg");
   }
 
-  async function previewPngUrl(url, name){
+  function setupDownload(dwgBlob, filename){
+    downloadDwgBtn.onclick = () => {
+      const url = URL.createObjectURL(dwgBlob);
+      activeBlobUrls.push(url);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    };
+  }
+
+  function previewPngBlob(pngBlob, pngName){
     try{
+      const url = URL.createObjectURL(pngBlob);
+      activeBlobUrls.push(url);
+
       const viewport = document.createElement("div");
       viewport.className = "previewViewport";
       viewportEl = viewport;
@@ -651,37 +800,25 @@ Request (describe what you want changed):
       const img = document.createElement("img");
       img.className = "previewImage";
       img.src = url;
-      img.alt = name || "PNG preview";
-      imgEl = img;
-
-      clearPreview("Loading PNG…");
-      setPreviewElement(viewport);
-      viewport.appendChild(stage);
-      stage.appendChild(img);
-
-      wireViewerInteractions(viewport);
+      img.alt = pngName || "PNG preview";
+      currentImgEl = img;
 
       img.onload = () => {
-        view.imgW = img.naturalWidth || 1;
-        view.imgH = img.naturalHeight || 1;
-
-        // Ensure stage is sized to image so transform-origin centre works properly
-        stage.style.width = view.imgW + "px";
-        stage.style.height = view.imgH + "px";
-
-        // Reset view for this image
-        view.rot = 0;
-        view.tx = 0;
-        view.ty = 0;
-        fitToViewport();
-
-        showInfo("Preview loaded.");
+        view.imgW = img.naturalWidth;
+        view.imgH = img.naturalHeight;
+        showInfo(`Previewing: ${pngName || "PNG"}`);
+        resetView();
       };
 
       img.onerror = () => {
         clearPreview("Could not render PNG preview.");
-        showWarn("PNG failed to load. Check the R2 URL is public and correct.");
+        showWarn("PNG failed to load. File may be corrupt or not actually a PNG.");
       };
+
+      stage.appendChild(img);
+      viewport.appendChild(stage);
+      setPreviewElement(viewport);
+      wireViewerInteractions(viewport);
 
     } catch (err){
       clearPreview("Could not render PNG preview.");
@@ -689,53 +826,146 @@ Request (describe what you want changed):
     }
   }
 
-  // ===================== WIRE EVENTS =====================
-  searchBox.addEventListener("input", applyFilter);
-  resetBtn.addEventListener("click", () => { searchBox.value = ""; applyFilter(); });
-  reloadBtn.addEventListener("click", () => loadLibrary().catch(e => showWarn(e.message)));
+  // -------------------- Modal logic --------------------
+  function openModal(){
+    modalMsg.textContent = "";
+    nameInput.value = "";
+    keywordsInput.value = "";
+    dwgFile.value = "";
+    pngFile.value = "";
+    modalBackdrop.style.display = "flex";
+  }
 
-  zoomInBtn.addEventListener("click", () => {
+  function closeModal(){ modalBackdrop.style.display = "none"; }
+
+  async function saveNewItem(){
+    hideWarn(); hideInfo();
+    modalMsg.textContent = "";
+
+    const name = nameInput.value.trim() || "Untitled";
+    const kws = tokenizeKeywords(keywordsInput.value);
+
+    const dwg = dwgFile.files?.[0] || null;
+    const png = pngFile.files?.[0] || null;
+
+    if (!dwg || !/\.dwg$/i.test(dwg.name)){
+      modalMsg.style.color = "var(--bad)";
+      modalMsg.textContent = "Pick a .dwg file.";
+      return;
+    }
+    if (!png || !/\.png$/i.test(png.name)){
+      modalMsg.style.color = "var(--bad)";
+      modalMsg.textContent = "Pick a .png file.";
+      return;
+    }
+
+    const item = {
+      id: id(),
+      name,
+      keywords: Array.from(new Set(kws)).sort(),
+      createdUtc: new Date().toISOString(),
+      dwgName: dwg.name,
+      pngName: png.name,
+      dwgBlob: dwg,
+      pngBlob: png
+    };
+
+    try{
+      await putItem(item);
+      modalMsg.style.color = "var(--muted)";
+      modalMsg.textContent = "Saved.";
+      closeModal();
+      await refresh();
+      await selectItem(item.id);
+      showInfo("Item added to local database.");
+    } catch (err){
+      modalMsg.style.color = "var(--bad)";
+      modalMsg.textContent = "Failed to save: " + (err?.message || err);
+    }
+  }
+
+  // -------------------- Export metadata --------------------
+  async function exportJson(){
+    const all = await getAllItems();
+    const meta = all.map(x => ({
+      id: x.id,
+      name: x.name,
+      keywords: x.keywords,
+      createdUtc: x.createdUtc,
+      dwgName: x.dwgName,
+      pngName: x.pngName
+    }));
+    const blob = new Blob([JSON.stringify(meta, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "dwg-library-metadata.json";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+    showInfo("Exported metadata JSON (not files).");
+  }
+
+  // -------------------- Wire events --------------------
+  addItemBtn.addEventListener("click", openModal);
+  closeModalBtn.addEventListener("click", closeModal);
+  modalBackdrop.addEventListener("click", (e) => { if (e.target === modalBackdrop) closeModal(); });
+  saveItemBtn.addEventListener("click", saveNewItem);
+
+  exportBtn.addEventListener("click", exportJson);
+
+  wipeBtn.addEventListener("click", async () => {
+    cleanupBlobUrls();
+    await wipeDb();
+    activeId = null;
+    showWarn("Local DB wiped.");
+    await refresh();
+  });
+
+  deleteItemBtn.addEventListener("click", async () => {
+    if (!activeId) return;
+    cleanupBlobUrls();
+    await deleteItem(activeId);
+    showWarn("Item deleted.");
+    activeId = null;
+    await refresh();
+  });
+
+  searchBox.addEventListener("input", applyFilter);
+  resetBtn.addEventListener("click", () => { searchBox.value=""; applyFilter(); });
+
+  addKwBtn.addEventListener("click", addKeyword);
+  kwInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter"){ e.preventDefault(); addKeyword(); }
+  });
+
+  zoomInBtn?.addEventListener("click", () => {
     if (!viewportEl) return;
     const rect = viewportEl.getBoundingClientRect();
     zoomAt(rect.left + rect.width/2, rect.top + rect.height/2, 1.25);
   });
 
-  zoomOutBtn.addEventListener("click", () => {
+  zoomOutBtn?.addEventListener("click", () => {
     if (!viewportEl) return;
     const rect = viewportEl.getBoundingClientRect();
     zoomAt(rect.left + rect.width/2, rect.top + rect.height/2, 0.8);
   });
 
-  centerBtn.addEventListener("click", () => centerView());
-  fitBtn.addEventListener("click", () => fitToViewport());
+  centerBtn?.addEventListener("click", () => centerView());
+  resetViewBtn?.addEventListener("click", () => resetView());
 
-  rotLeftBtn.addEventListener("click", () => setRotation(view.rot - 90));
-  rotRightBtn.addEventListener("click", () => setRotation(view.rot + 90));
+  rotLeftBtn?.addEventListener("click", () => setRotation(view.rot - 90));
+  rotRightBtn?.addEventListener("click", () => setRotation(view.rot + 90));
 
-  requestNewBtn.addEventListener("click", () => {
-    const subject = "DWG Library new item request";
-    const body =
-`Request a new library item:
-
-Name:
-Keywords (comma separated):
-PNG URL (R2):
-DWG URL (R2):
-
-Notes:
-- `;
-    mailto(subject, body);
-  });
-
-  // ===================== BOOT =====================
+  // -------------------- Boot --------------------
   (async () => {
     try{
-      await loadLibrary();
-      if (!items.length) clearPreview("No items to show.");
+      await refresh();
+      clearPreview(items.length ? "Select an item to preview its PNG." : "Add an item to begin.");
     } catch (err){
-      statusLine.textContent = "Load failed";
-      showWarn(err?.message || err);
-      clearPreview("Could not load library.");
+      statusLine.textContent = "DB init failed";
+      showWarn("IndexedDB failed: " + (err?.message || err));
     }
   })();
 })();
