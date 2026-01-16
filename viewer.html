@@ -1,84 +1,744 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<title>DWG Library</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
-body{margin:0;font-family:system-ui;background:#0b0d10;color:#e7edf3}
-header{padding:14px;border-bottom:1px solid #243040}
-main{display:grid;grid-template-columns:320px 1fr;height:calc(100vh - 58px)}
-aside{border-right:1px solid #243040;padding:12px;overflow:auto}
-section{padding:12px}
-.item{padding:8px;border-bottom:1px solid #243040;cursor:pointer}
-.item:hover{background:#1a2028}
-.item.active{background:#243040}
-.preview{height:100%;display:flex;align-items:center;justify-content:center;background:#fff}
-.preview img{max-width:100%;max-height:100%}
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>DWG Library (JSON + R2 Viewer)</title>
+  <style>
+    :root{
+      --bg:#0b0d10; --panel:#12161c; --panel2:#0f1318;
+      --text:#e7edf3; --muted:#9aa7b4; --accent:#6ee7ff; --bad:#ff6e6e;
+      --border:#243040;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      background:linear-gradient(180deg,#080a0d,#0b0d10 30%,#07090b);
+      color:var(--text);
+    }
+    header{
+      padding:16px 18px;
+      border-bottom:1px solid var(--border);
+      background:rgba(18,22,28,.9);
+      position:sticky; top:0; z-index:10;
+      backdrop-filter: blur(6px);
+    }
+    header .row{display:flex; gap:12px; flex-wrap:wrap; align-items:center; justify-content:space-between;}
+    h1{font-size:16px;margin:0;font-weight:650;letter-spacing:.2px}
+    .sub{color:var(--muted); font-size:12px}
+    .wrap{display:grid; grid-template-columns: 380px 1fr; min-height: calc(100vh - 66px);}
+    .left{
+      border-right:1px solid var(--border);
+      background:rgba(18,22,28,.65);
+    }
+    .right{background:rgba(10,12,15,.4);}
+    .pane{padding:14px;}
+    .card{
+      background:linear-gradient(180deg, rgba(18,22,28,.9), rgba(15,19,24,.9));
+      border:1px solid var(--border);
+      border-radius:12px;
+      padding:12px;
+      box-shadow: 0 12px 40px rgba(0,0,0,.25);
+    }
+    .stack{display:flex; flex-direction:column; gap:10px;}
+    input, button{
+      font:inherit;
+      color:var(--text);
+      background:rgba(10,12,15,.9);
+      border:1px solid var(--border);
+      border-radius:10px;
+      padding:10px 10px;
+      outline:none;
+    }
+    input:focus, button:focus{border-color: rgba(110,231,255,.55); box-shadow: 0 0 0 3px rgba(110,231,255,.12);}
+    button{
+      cursor:pointer;
+      background:linear-gradient(180deg, rgba(110,231,255,.16), rgba(110,231,255,.06));
+      user-select:none;
+    }
+    button.secondary{
+      background:linear-gradient(180deg, rgba(154,167,180,.14), rgba(154,167,180,.06));
+    }
+    button.danger{
+      background:linear-gradient(180deg, rgba(255,110,110,.18), rgba(255,110,110,.06));
+      border-color: rgba(255,110,110,.35);
+    }
+    .btnrow{display:flex; gap:8px; flex-wrap:wrap;}
+    .small{font-size:12px; color:var(--muted); line-height:1.4;}
+    .results{
+      margin-top:10px;
+      border:1px solid var(--border);
+      border-radius:12px;
+      overflow:hidden;
+    }
+    .result{
+      padding:10px 10px;
+      border-bottom:1px solid rgba(36,48,64,.7);
+      background:rgba(10,12,15,.55);
+      cursor:pointer;
+    }
+    .result:hover{background:rgba(110,231,255,.06);}
+    .result.active{background:rgba(110,231,255,.10); outline:1px solid rgba(110,231,255,.25);}
+    .result:last-child{border-bottom:none;}
+    .rtitle{font-size:13px; font-weight:650;}
+    .rmeta{font-size:12px; color:var(--muted); margin-top:2px; display:flex; gap:10px; flex-wrap:wrap;}
+    .kwwrap{display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;}
+    .kw{
+      display:inline-flex; align-items:center;
+      padding:6px 10px;
+      border-radius:999px;
+      border:1px solid rgba(110,231,255,.22);
+      background:rgba(110,231,255,.08);
+      font-size:12px;
+      user-select:none;
+    }
+    .viewer{min-height: calc(100vh - 66px); padding:14px;}
+    .viewer .card{height:100%;}
+    .viewerHeader{display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap;}
+    .fileTitle{font-size:14px; font-weight:700;}
+    .notice{padding:10px; border-radius:10px; border:1px solid rgba(255,110,110,.35); background:rgba(255,110,110,.06); color:var(--text); font-size:12px; line-height:1.4;}
+    .ok{border-color: rgba(110,231,255,.35); background: rgba(110,231,255,.06);}
+
+    .previewBox{
+      border:1px solid rgba(36,48,64,.85);
+      border-radius:12px;
+      background:#ffffff;
+      overflow:hidden;
+      margin-top:10px;
+    }
+
+    /* Viewer controls */
+    .viewerControls{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      align-items:center;
+      margin-top:10px;
+    }
+    .viewerControls .mini{
+      padding:8px 10px;
+      font-size:12px;
+    }
+
+    /* Viewport and stage */
+    .previewViewport{
+      width:100%;
+      height: calc(100vh - 240px);
+      min-height:420px;
+      overflow:hidden;
+      position:relative;
+      touch-action:none;
+      user-select:none;
+      cursor:grab;
+    }
+    .previewViewport.dragging{ cursor:grabbing; }
+
+    /* We anchor stage at viewport center and rotate around image center */
+    .previewStage{
+      position:absolute;
+      left:50%;
+      top:50%;
+      transform-origin: 50% 50%;
+      will-change: transform;
+    }
+    .previewImage{
+      display:block;
+      pointer-events:none;
+      user-select:none;
+    }
+
+    .footerBar{display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:space-between; margin-top:10px;}
+
+    @media (max-width: 980px){
+      .wrap{grid-template-columns: 1fr;}
+      .left{border-right:none; border-bottom:1px solid var(--border);}
+      .previewViewport{height:60vh;}
+    }
+  </style>
 </head>
 <body>
-
 <header>
-  <strong>DWG Library</strong>
+  <div class="row">
+    <div>
+      <h1>DWG Library (JSON + R2)</h1>
+      <div class="sub">Metadata: GitHub Pages JSON. Files: Cloudflare R2. No IndexedDB. No mystery bugs.</div>
+    </div>
+    <div class="btnrow">
+      <button id="requestNewBtn" class="secondary" title="Email a request to add a new item">Request new item</button>
+      <button id="reloadBtn" class="secondary" title="Reload library.json">Reload</button>
+    </div>
+  </div>
 </header>
 
-<main>
-  <aside id="list"></aside>
-  <section>
-    <div id="title"></div>
-    <div class="preview" id="preview">Select an item</div>
-    <p><a id="download" target="_blank"></a></p>
-  </section>
-</main>
+<div class="wrap">
+  <aside class="left">
+    <div class="pane">
+      <div class="card stack">
+        <div class="small">
+          Shared library loaded from <code>library.json</code>. Search by name/keywords.
+        </div>
+
+        <div class="stack">
+          <input id="searchBox" placeholder="Search keywords, name…" />
+          <div class="btnrow">
+            <button id="resetBtn" class="secondary">Reset</button>
+          </div>
+        </div>
+
+        <div class="small" id="statusLine">Loading…</div>
+        <div class="results" id="results"></div>
+        <div class="small" id="countLine"></div>
+      </div>
+    </div>
+  </aside>
+
+  <main class="right viewer">
+    <div class="card">
+      <div class="viewerHeader">
+        <div>
+          <div class="fileTitle" id="title">No item selected</div>
+          <div class="small" id="meta"></div>
+        </div>
+        <div class="btnrow">
+          <button id="downloadDwgBtn" style="display:none;">Download DWG</button>
+          <button id="requestEditBtn" class="secondary" style="display:none;">Request edit</button>
+        </div>
+      </div>
+
+      <div class="previewBox">
+        <div id="previewHost" class="previewViewport" style="display:flex;align-items:center;justify-content:center;color:#667;padding:18px;">
+          Select an item to preview its PNG.
+        </div>
+      </div>
+
+      <div class="viewerControls">
+        <button id="zoomOutBtn" class="secondary mini">−</button>
+        <button id="zoomInBtn" class="secondary mini">+</button>
+        <button id="centerBtn" class="secondary mini">Center</button>
+        <button id="fitBtn" class="secondary mini">Fit</button>
+        <button id="rotLeftBtn" class="secondary mini">⟲ 90°</button>
+        <button id="rotRightBtn" class="secondary mini">⟳ 90°</button>
+      </div>
+
+      <div class="stack" style="margin-top:10px;">
+        <div>
+          <div class="small"><b>Keywords</b></div>
+          <div class="kwwrap" id="kwWrap"></div>
+        </div>
+
+        <div id="warn" class="notice" style="display:none;"></div>
+        <div id="info" class="notice ok" style="display:none;"></div>
+      </div>
+
+      <div class="footerBar">
+        <div class="small">Tip: mouse wheel zooms at cursor. Drag pans. Rotation is about the image centre.</div>
+        <div class="small">Edits go via email request (viewer stays read-only).</div>
+      </div>
+    </div>
+  </main>
+</div>
 
 <script>
-const LIBRARY_URL =
-  "https://bendbartley.github.io/dwg-library/library.json";
+(() => {
+  // ===================== CONFIG =====================
+  // Point this at your GitHub Pages copy of library.json (NOT the github.com/blob URL).
+  // Example: https://bendbartley.github.io/dwg-library/library.json
+  const LIBRARY_JSON_URL = "https://bendbartley.github.io/dwg-library/library.json";
 
-let items = [];
-let active = null;
+  // Where email requests go
+  const REQUEST_EMAIL_TO = ""; // e.g. "you@domain.com" (leave blank to let user pick)
 
-async function loadLibrary(){
-  const res = await fetch(LIBRARY_URL, { cache: "no-store" });
-  if (!res.ok) throw new Error("Failed to load library.json");
-  const data = await res.json();
-  if (!Array.isArray(data)) throw new Error("library.json must be an array");
-  items = data;
-  renderList();
-}
+  // ===================== UI =====================
+  const resultsEl = document.getElementById("results");
+  const statusLine = document.getElementById("statusLine");
+  const countLine = document.getElementById("countLine");
+  const searchBox = document.getElementById("searchBox");
+  const resetBtn = document.getElementById("resetBtn");
+  const reloadBtn = document.getElementById("reloadBtn");
 
-function renderList(){
-  const el = document.getElementById("list");
-  el.innerHTML = "";
-  items.forEach(it => {
-    const d = document.createElement("div");
-    d.className = "item";
-    d.textContent = it.name;
-    d.onclick = () => selectItem(it);
-    el.appendChild(d);
+  const titleEl = document.getElementById("title");
+  const metaEl = document.getElementById("meta");
+  const previewHost = document.getElementById("previewHost");
+  const kwWrap = document.getElementById("kwWrap");
+  const warnEl = document.getElementById("warn");
+  const infoEl = document.getElementById("info");
+
+  const downloadDwgBtn = document.getElementById("downloadDwgBtn");
+  const requestEditBtn = document.getElementById("requestEditBtn");
+  const requestNewBtn = document.getElementById("requestNewBtn");
+
+  const zoomInBtn = document.getElementById("zoomInBtn");
+  const zoomOutBtn = document.getElementById("zoomOutBtn");
+  const centerBtn = document.getElementById("centerBtn");
+  const fitBtn = document.getElementById("fitBtn");
+  const rotLeftBtn = document.getElementById("rotLeftBtn");
+  const rotRightBtn = document.getElementById("rotRightBtn");
+
+  // ===================== STATE =====================
+  let items = [];
+  let filtered = [];
+  let activeId = null;
+
+  // Viewer elements
+  let viewportEl = null;
+  let stageEl = null;
+  let imgEl = null;
+
+  // Transform state (rotation about image centre)
+  const view = {
+    scale: 1,
+    minScale: 0.05,
+    maxScale: 20,
+    tx: 0,   // pan in screen px
+    ty: 0,
+    rot: 0,  // degrees
+    imgW: 0,
+    imgH: 0
+  };
+
+  const drag = { active:false, startX:0, startY:0, startTx:0, startTy:0 };
+
+  // ===================== HELPERS =====================
+  function escapeHtml(s){
+    return (s ?? "").toString()
+      .replaceAll("&","&amp;")
+      .replaceAll("<","&lt;")
+      .replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;")
+      .replaceAll("'","&#039;");
+  }
+
+  function norm(s){ return (s ?? "").toString().trim().toLowerCase(); }
+
+  function showWarn(msg){
+    warnEl.style.display = "block";
+    warnEl.textContent = msg;
+  }
+  function hideWarn(){ warnEl.style.display = "none"; }
+
+  function showInfo(msg){
+    infoEl.style.display = "block";
+    infoEl.textContent = msg;
+  }
+  function hideInfo(){ infoEl.style.display = "none"; }
+
+  function clearPreview(text){
+    previewHost.innerHTML = "";
+    previewHost.style.display = "flex";
+    previewHost.style.alignItems = "center";
+    previewHost.style.justifyContent = "center";
+    previewHost.style.color = "#667";
+    previewHost.textContent = text || "";
+    viewportEl = null;
+    stageEl = null;
+    imgEl = null;
+  }
+
+  function setPreviewElement(el){
+    previewHost.innerHTML = "";
+    previewHost.style.display = "block";
+    previewHost.style.color = "inherit";
+    previewHost.appendChild(el);
+  }
+
+  function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+
+  function rotatedBounds(iw, ih, rotDeg){
+    const rad = rotDeg * Math.PI / 180;
+    const cos = Math.abs(Math.cos(rad));
+    const sin = Math.abs(Math.sin(rad));
+    return { w: iw * cos + ih * sin, h: iw * sin + ih * cos };
+  }
+
+  function applyTransform(){
+    if (!stageEl) return;
+    // Stage is anchored at viewport centre (left/top 50%), so:
+    // - base translate(-50%, -50%) keeps stage origin at centre
+    // - then pan translate(tx, ty)
+    // - then rotate+scale about image centre via transform-origin 50% 50%
+    stageEl.style.transform =
+      `translate(-50%, -50%) translate(${view.tx}px, ${view.ty}px) rotate(${view.rot}deg) scale(${view.scale})`;
+  }
+
+  function fitToViewport(){
+    if (!viewportEl || !imgEl) return;
+    const vw = viewportEl.clientWidth;
+    const vh = viewportEl.clientHeight;
+
+    const iw = view.imgW || imgEl.naturalWidth || 1;
+    const ih = view.imgH || imgEl.naturalHeight || 1;
+
+    const rb = rotatedBounds(iw, ih, view.rot);
+    const s = Math.min(vw / rb.w, vh / rb.h) * 0.98;
+
+    view.scale = clamp(s, view.minScale, view.maxScale);
+    view.tx = 0;
+    view.ty = 0;
+    applyTransform();
+  }
+
+  function centerView(){
+    // Because stage is centered, "center" is literally pan = 0,0
+    view.tx = 0;
+    view.ty = 0;
+    applyTransform();
+  }
+
+  function setRotation(deg){
+    let r = ((deg % 360) + 360) % 360;
+    if (r > 180) r -= 360;
+    view.rot = r;
+    // keep view centered on rotate (what humans expect)
+    centerView();
+    // optional: if you prefer rotate to keep fit, swap this:
+    // fitToViewport();
+  }
+
+  // Zoom-at-cursor with rotation-aware math
+  function zoomAt(clientX, clientY, factor){
+    if (!viewportEl) return;
+
+    const rect = viewportEl.getBoundingClientRect();
+    const cx = rect.left + rect.width/2;
+    const cy = rect.top + rect.height/2;
+
+    const oldScale = view.scale;
+    const newScale = clamp(oldScale * factor, view.minScale, view.maxScale);
+    if (newScale === oldScale) return;
+
+    // Cursor position relative to viewport centre, after pan
+    const dx = (clientX - cx) - view.tx;
+    const dy = (clientY - cy) - view.ty;
+
+    // Convert screen delta to local (image-centred) coordinates
+    const rad = view.rot * Math.PI / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+
+    // Apply inverse rotation then inverse scale
+    const lx = ( cos*dx + sin*dy) / oldScale;
+    const ly = (-sin*dx + cos*dy) / oldScale;
+
+    // Now compute new pan so that local point maps back to cursor under new scale
+    const ndx = (cos*lx - sin*ly) * newScale;
+    const ndy = (sin*lx + cos*ly) * newScale;
+
+    view.tx = (clientX - cx) - ndx;
+    view.ty = (clientY - cy) - ndy;
+    view.scale = newScale;
+
+    applyTransform();
+  }
+
+  function wireViewerInteractions(viewport){
+    viewport.onpointerdown = (e) => {
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      viewport.setPointerCapture(e.pointerId);
+      drag.active = true;
+      drag.startX = e.clientX;
+      drag.startY = e.clientY;
+      drag.startTx = view.tx;
+      drag.startTy = view.ty;
+      viewport.classList.add("dragging");
+    };
+
+    viewport.onpointermove = (e) => {
+      if (!drag.active) return;
+      const dx = e.clientX - drag.startX;
+      const dy = e.clientY - drag.startY;
+      view.tx = drag.startTx + dx;
+      view.ty = drag.startTy + dy;
+      applyTransform();
+    };
+
+    viewport.onpointerup = (e) => {
+      drag.active = false;
+      viewport.classList.remove("dragging");
+      try{ viewport.releasePointerCapture(e.pointerId); } catch {}
+    };
+    viewport.onpointercancel = () => {
+      drag.active = false;
+      viewport.classList.remove("dragging");
+    };
+
+    viewport.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      const factor = e.deltaY > 0 ? 0.90 : 1.10;
+      zoomAt(e.clientX, e.clientY, factor);
+    }, { passive:false });
+
+    const ro = new ResizeObserver(() => {
+      // Keep current view, but avoid drift when viewport changes
+      // (centering pan is safe, doesn't trash zoom/rot)
+      centerView();
+    });
+    ro.observe(viewport);
+  }
+
+  function mailto(subject, body){
+    const to = REQUEST_EMAIL_TO || "";
+    const url = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    window.location.href = url;
+  }
+
+  // ===================== LIST + SEARCH =====================
+  function applyFilter(){
+    const q = norm(searchBox.value);
+    const tokens = q.split(/\s+/).filter(Boolean);
+
+    if (tokens.length === 0){
+      filtered = [...items].sort((a,b) => (a.name||"").localeCompare(b.name||""));
+    } else {
+      filtered = items
+        .map(it => {
+          const hay = ((it.name||"") + " " + (it.keywords||[]).join(" ")).toLowerCase();
+          let score = 0;
+          for (const t of tokens){
+            if ((it.keywords||[]).some(k => (k||"").toLowerCase().includes(t))) score += 3;
+            if (hay.includes(t)) score += 1;
+          }
+          return { it, score };
+        })
+        .filter(x => x.score > 0)
+        .sort((a,b) => b.score - a.score || (a.it.name||"").localeCompare(b.it.name||""))
+        .map(x => x.it);
+    }
+
+    renderResults();
+    countLine.textContent = `${filtered.length} / ${items.length} items shown`;
+  }
+
+  function renderResults(){
+    resultsEl.innerHTML = "";
+    if (filtered.length === 0){
+      const d = document.createElement("div");
+      d.className = "result";
+      d.style.cursor = "default";
+      d.innerHTML = `<div class="rtitle">No matches</div><div class="rmeta">Try fewer keywords.</div>`;
+      resultsEl.appendChild(d);
+      return;
+    }
+
+    for (const it of filtered){
+      const row = document.createElement("div");
+      row.className = "result" + (it.id === activeId ? " active" : "");
+      row.addEventListener("click", () => selectItem(it.id));
+      const kwPrev = (it.keywords || []).slice(0, 6).join(", ");
+      row.innerHTML = `
+        <div class="rtitle">${escapeHtml(it.name || "Untitled")}</div>
+        <div class="rmeta">
+          <span>${(it.keywords||[]).length} keywords</span>
+          <span>•</span>
+          <span>${escapeHtml(kwPrev || "none")}${(it.keywords||[]).length>6 ? "…" : ""}</span>
+        </div>
+      `;
+      resultsEl.appendChild(row);
+    }
+  }
+
+  function renderKeywords(it){
+    kwWrap.innerHTML = "";
+    const kws = it.keywords || [];
+    if (kws.length === 0){
+      const s = document.createElement("div");
+      s.className = "small";
+      s.textContent = "No keywords.";
+      kwWrap.appendChild(s);
+      return;
+    }
+    for (const k of kws){
+      const chip = document.createElement("div");
+      chip.className = "kw";
+      chip.textContent = k;
+      kwWrap.appendChild(chip);
+    }
+  }
+
+  // ===================== DATA LOAD =====================
+  async function loadLibrary(){
+    hideWarn(); hideInfo();
+    statusLine.textContent = "Loading library.json…";
+
+    const res = await fetch(LIBRARY_JSON_URL, { cache: "no-store" });
+    if (!res.ok){
+      throw new Error(`library.json fetch failed (${res.status}). Make sure you're using the GitHub Pages URL, not github.com/blob.`);
+    }
+
+    const data = await res.json();
+    if (!Array.isArray(data)){
+      throw new Error("library.json must be an array at top-level.");
+    }
+
+    // Normalize and keep only sane rows
+    items = data
+      .filter(x => x && typeof x === "object")
+      .map(x => ({
+        id: (x.id ?? "").toString(),
+        name: (x.name ?? "Untitled").toString(),
+        keywords: Array.isArray(x.keywords) ? x.keywords.map(k => (k ?? "").toString()).filter(Boolean) : [],
+        pngUrl: (x.pngUrl ?? "").toString(),
+        dwgUrl: (x.dwgUrl ?? "").toString(),
+        updatedUtc: (x.updatedUtc ?? "").toString()
+      }))
+      .filter(x => x.id && x.pngUrl && x.dwgUrl);
+
+    statusLine.textContent = `Loaded ${items.length} items`;
+    activeId = null;
+    applyFilter();
+
+    if (items.length){
+      await selectItem(items[0].id);
+    } else {
+      titleEl.textContent = "No item selected";
+      metaEl.textContent = "";
+      downloadDwgBtn.style.display = "none";
+      requestEditBtn.style.display = "none";
+      kwWrap.innerHTML = "";
+      clearPreview("No items in library.json (or missing urls).");
+    }
+  }
+
+  async function selectItem(id){
+    hideWarn(); hideInfo();
+
+    const it = items.find(x => x.id === id);
+    if (!it){
+      showWarn("Item not found in loaded list.");
+      return;
+    }
+
+    activeId = id;
+    renderResults();
+
+    titleEl.textContent = it.name || "Untitled";
+    metaEl.textContent =
+      `PNG: ${it.pngUrl} | DWG: ${it.dwgUrl}` + (it.updatedUtc ? ` | Updated: ${new Date(it.updatedUtc).toLocaleString()}` : "");
+
+    downloadDwgBtn.style.display = "inline-block";
+    requestEditBtn.style.display = "inline-block";
+    downloadDwgBtn.onclick = () => window.open(it.dwgUrl, "_blank", "noopener");
+
+    requestEditBtn.onclick = () => {
+      const subject = `DWG Library edit request: ${it.name} (${it.id})`;
+      const body =
+`Item:
+- id: ${it.id}
+- name: ${it.name}
+- pngUrl: ${it.pngUrl}
+- dwgUrl: ${it.dwgUrl}
+- keywords: ${(it.keywords||[]).join(", ")}
+
+Request (describe what you want changed):
+- `;
+      mailto(subject, body);
+    };
+
+    renderKeywords(it);
+    await previewPngUrl(it.pngUrl, it.name);
+  }
+
+  async function previewPngUrl(url, name){
+    try{
+      const viewport = document.createElement("div");
+      viewport.className = "previewViewport";
+      viewportEl = viewport;
+
+      const stage = document.createElement("div");
+      stage.className = "previewStage";
+      stageEl = stage;
+
+      const img = document.createElement("img");
+      img.className = "previewImage";
+      img.src = url;
+      img.alt = name || "PNG preview";
+      imgEl = img;
+
+      clearPreview("Loading PNG…");
+      setPreviewElement(viewport);
+      viewport.appendChild(stage);
+      stage.appendChild(img);
+
+      wireViewerInteractions(viewport);
+
+      img.onload = () => {
+        view.imgW = img.naturalWidth || 1;
+        view.imgH = img.naturalHeight || 1;
+
+        // Ensure stage is sized to image so transform-origin centre works properly
+        stage.style.width = view.imgW + "px";
+        stage.style.height = view.imgH + "px";
+
+        // Reset view for this image
+        view.rot = 0;
+        view.tx = 0;
+        view.ty = 0;
+        fitToViewport();
+
+        showInfo("Preview loaded.");
+      };
+
+      img.onerror = () => {
+        clearPreview("Could not render PNG preview.");
+        showWarn("PNG failed to load. Check the R2 URL is public and correct.");
+      };
+
+    } catch (err){
+      clearPreview("Could not render PNG preview.");
+      showWarn("PNG preview failed: " + (err?.message || err));
+    }
+  }
+
+  // ===================== WIRE EVENTS =====================
+  searchBox.addEventListener("input", applyFilter);
+  resetBtn.addEventListener("click", () => { searchBox.value = ""; applyFilter(); });
+  reloadBtn.addEventListener("click", () => loadLibrary().catch(e => showWarn(e.message)));
+
+  zoomInBtn.addEventListener("click", () => {
+    if (!viewportEl) return;
+    const rect = viewportEl.getBoundingClientRect();
+    zoomAt(rect.left + rect.width/2, rect.top + rect.height/2, 1.25);
   });
-}
 
-function selectItem(it){
-  active = it;
-  document.getElementById("title").textContent = it.name;
+  zoomOutBtn.addEventListener("click", () => {
+    if (!viewportEl) return;
+    const rect = viewportEl.getBoundingClientRect();
+    zoomAt(rect.left + rect.width/2, rect.top + rect.height/2, 0.8);
+  });
 
-  const p = document.getElementById("preview");
-  p.innerHTML = "";
-  const img = document.createElement("img");
-  img.src = it.pngUrl;
-  p.appendChild(img);
+  centerBtn.addEventListener("click", () => centerView());
+  fitBtn.addEventListener("click", () => fitToViewport());
 
-  const a = document.getElementById("download");
-  a.href = it.dwgUrl;
-  a.textContent = "Download DWG";
-}
+  rotLeftBtn.addEventListener("click", () => setRotation(view.rot - 90));
+  rotRightBtn.addEventListener("click", () => setRotation(view.rot + 90));
 
-loadLibrary().catch(err => {
-  document.body.innerHTML = "<pre>" + err.message + "</pre>";
-});
+  requestNewBtn.addEventListener("click", () => {
+    const subject = "DWG Library new item request";
+    const body =
+`Request a new library item:
+
+Name:
+Keywords (comma separated):
+PNG URL (R2):
+DWG URL (R2):
+
+Notes:
+- `;
+    mailto(subject, body);
+  });
+
+  // ===================== BOOT =====================
+  (async () => {
+    try{
+      await loadLibrary();
+      if (!items.length) clearPreview("No items to show.");
+    } catch (err){
+      statusLine.textContent = "Load failed";
+      showWarn(err?.message || err);
+      clearPreview("Could not load library.");
+    }
+  })();
+})();
 </script>
-
 </body>
 </html>
