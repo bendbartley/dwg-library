@@ -6,8 +6,8 @@
       "masonry",
       "test"
     ],
-    "png": "https://pub-38ef2b46002048cca5df22c19de6f3e0.r2.dev/png/test_drawing.png",
-    "dwg": "https://pub-38ef2b46002048cca5df22c19de6f3e0.r2.dev/dwg/test_drawing.dwg",
+    "pngUrl": "https://pub-38ef2b46002048cca5df22c19de6f3e0.r2.dev/png/test_drawing.png",
+    "dwgUrl": "https://pub-38ef2b46002048cca5df22c19de6f3e0.r2.dev/dwg/test_drawing.dwg",
     "updatedUtc": "2026-01-15T23:43:13.548Z"
   }
 ]
