@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>DWG Library Viewer (Portable)</title>
+  <title>DWG Library: Upload + Keyword Search + PNG Preview</title>
   <style>
     :root{
       --bg:#0b0d10; --panel:#12161c; --panel2:#0f1318;
@@ -27,7 +27,6 @@
     header .row{display:flex; gap:12px; flex-wrap:wrap; align-items:center; justify-content:space-between;}
     h1{font-size:16px;margin:0;font-weight:650;letter-spacing:.2px}
     .sub{color:var(--muted); font-size:12px}
-
     .wrap{display:grid; grid-template-columns: 380px 1fr; min-height: calc(100vh - 66px);}
     .left{
       border-right:1px solid var(--border);
@@ -61,9 +60,12 @@
     button.secondary{
       background:linear-gradient(180deg, rgba(154,167,180,.14), rgba(154,167,180,.06));
     }
+    button.danger{
+      background:linear-gradient(180deg, rgba(255,110,110,.18), rgba(255,110,110,.06));
+      border-color: rgba(255,110,110,.35);
+    }
     .btnrow{display:flex; gap:8px; flex-wrap:wrap;}
     .small{font-size:12px; color:var(--muted); line-height:1.4;}
-
     .results{
       margin-top:10px;
       border:1px solid var(--border);
@@ -81,7 +83,6 @@
     .result:last-child{border-bottom:none;}
     .rtitle{font-size:13px; font-weight:650;}
     .rmeta{font-size:12px; color:var(--muted); margin-top:2px; display:flex; gap:10px; flex-wrap:wrap;}
-
     .kwwrap{display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;}
     .kw{
       display:inline-flex; align-items:center; gap:8px;
@@ -92,14 +93,19 @@
       font-size:12px;
       user-select:none;
     }
-
+    .kw button{
+      padding:0 6px;
+      border-radius:8px;
+      border:1px solid rgba(255,110,110,.25);
+      background:rgba(255,110,110,.08);
+      color:var(--text);
+    }
     .viewer{min-height: calc(100vh - 66px); padding:14px;}
     .viewer .card{height:100%;}
     .viewerHeader{display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap;}
     .fileTitle{font-size:14px; font-weight:700;}
     .notice{padding:10px; border-radius:10px; border:1px solid rgba(255,110,110,.35); background:rgba(255,110,110,.06); color:var(--text); font-size:12px; line-height:1.4;}
     .ok{border-color: rgba(110,231,255,.35); background: rgba(110,231,255,.06);}
-
     .previewBox{
       border:1px solid rgba(36,48,64,.85);
       border-radius:12px;
@@ -116,10 +122,13 @@
       align-items:center;
       margin-top:10px;
     }
-    .viewerControls .mini{padding:8px 10px; font-size:12px;}
+    .viewerControls .mini{
+      padding:8px 10px;
+      font-size:12px;
+    }
     .previewViewport{
       width:100%;
-      height: calc(100vh - 280px);
+      height: calc(100vh - 240px);
       min-height:420px;
       overflow:hidden;
       position:relative;
@@ -127,10 +136,11 @@
       user-select:none;
       cursor:grab;
     }
-    .previewViewport.dragging{cursor:grabbing;}
+    .previewViewport.dragging{ cursor:grabbing; }
     .previewStage{
       position:absolute;
-      left:0; top:0;
+      left:0;
+      top:0;
       transform-origin: 0 0;
       will-change: transform;
     }
@@ -139,10 +149,34 @@
       pointer-events:none;
     }
 
+    .footerBar{display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:space-between; margin-top:10px;}
+
+    /* Modal */
+    .modalBackdrop{
+      position:fixed; inset:0;
+      background:rgba(0,0,0,.55);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      padding:16px;
+      z-index:999;
+    }
+    .modal{
+      width:min(680px, 100%);
+      border:1px solid var(--border);
+      border-radius:14px;
+      background:linear-gradient(180deg, rgba(18,22,28,.96), rgba(15,19,24,.96));
+      box-shadow: 0 20px 80px rgba(0,0,0,.55);
+      padding:14px;
+    }
+    .grid2{display:grid; grid-template-columns: 1fr 1fr; gap:10px;}
+    .grid1{display:grid; grid-template-columns: 1fr; gap:10px;}
+    label{font-size:12px; color:var(--muted); display:block; margin-bottom:6px;}
     @media (max-width: 980px){
       .wrap{grid-template-columns: 1fr;}
       .left{border-right:none; border-bottom:1px solid var(--border);}
       .previewViewport{height:60vh;}
+      .grid2{grid-template-columns:1fr;}
     }
   </style>
 </head>
@@ -150,12 +184,13 @@
 <header>
   <div class="row">
     <div>
-      <h1>DWG Library</h1>
-      <div class="sub">Portable viewer. Loads library.json by URL. Previews PNG. Downloads DWG. Requests via email.</div>
+      <h1>DWG Library (Local Upload DB)</h1>
+      <div class="sub">Uploads stored in IndexedDB. PNG preview. DWG download.</div>
     </div>
     <div class="btnrow">
-      <button id="reloadBtn" class="secondary" title="Reload library.json">Reload</button>
-      <button id="requestNewBtn" class="secondary" title="Email a request to add a new item">Request new item</button>
+      <button id="addItemBtn">Add item</button>
+      <button id="exportBtn" class="secondary" title="Export metadata (not files) as JSON">Export JSON</button>
+      <button id="wipeBtn" class="danger" title="Deletes everything from the local database">Wipe DB</button>
     </div>
   </div>
 </header>
@@ -164,27 +199,20 @@
   <aside class="left">
     <div class="pane">
       <div class="card stack">
-
-        <div class="stack" style="gap:8px;">
-          <div class="small" id="statusLine">Loading…</div>
-
-          <div class="small" style="margin-top:4px;">Library URL</div>
-          <input id="libraryUrlBox" placeholder="Paste library.json URL" />
-          <div class="btnrow">
-            <button id="setLibraryUrlBtn" class="secondary">Use URL</button>
-          </div>
-
-          <div class="small" id="libHint" style="display:none;"></div>
+        <div class="small">
+          This DB lives in your browser (IndexedDB). Other PCs/browsers do not see it.
         </div>
 
-        <div class="stack" style="margin-top:6px;">
-          <input id="searchBox" placeholder="Search name, id, keywords…" />
+        <div class="stack">
+          <input id="searchBox" placeholder="Search keywords, name…" />
           <div class="btnrow">
             <button id="resetBtn" class="secondary">Reset</button>
           </div>
         </div>
 
+        <div class="small" id="statusLine">Loading…</div>
         <div class="results" id="results"></div>
+
         <div class="small" id="countLine"></div>
       </div>
     </div>
@@ -199,7 +227,7 @@
         </div>
         <div class="btnrow">
           <button id="downloadDwgBtn" style="display:none;">Download DWG</button>
-          <button id="requestEditBtn" class="secondary" style="display:none;">Request edit</button>
+          <button id="deleteItemBtn" class="danger" style="display:none;">Delete item</button>
         </div>
       </div>
 
@@ -223,85 +251,181 @@
           <div class="small"><b>Keywords</b></div>
           <div class="kwwrap" id="kwWrap"></div>
         </div>
+        <div class="btnrow">
+          <input id="kwInput" placeholder="Add keyword (press Enter)" />
+          <button id="addKwBtn">Add</button>
+        </div>
 
         <div id="warn" class="notice" style="display:none;"></div>
         <div id="info" class="notice ok" style="display:none;"></div>
       </div>
 
-      <div class="small" style="margin-top:10px;">
-        Tip: scroll-wheel / trackpad zoom, drag to pan, rotate buttons. Mailto won’t attach files reliably, because email clients hate you.
+      <div class="footerBar">
+        <div class="small">PNG preview is simple and reliable. Shocking.</div>
+        <div class="small">Shared DB + write-to-folder still needs a backend.</div>
       </div>
     </div>
   </main>
 </div>
 
+<!-- Add Item Modal -->
+<div class="modalBackdrop" id="modalBackdrop">
+  <div class="modal">
+    <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;">
+      <div>
+        <div class="fileTitle">Add item</div>
+        <div class="small">Requires DWG (download) and PNG (preview).</div>
+      </div>
+      <div class="btnrow">
+        <button id="closeModalBtn" class="secondary">Cancel</button>
+        <button id="saveItemBtn">Save item</button>
+      </div>
+    </div>
+
+    <div class="grid2" style="margin-top:10px;">
+      <div>
+        <label>Name</label>
+        <input id="nameInput" placeholder="e.g. Planter retaining wall" />
+      </div>
+      <div>
+        <label>Initial keywords (comma or space separated)</label>
+        <input id="keywordsInput" placeholder="masonry, planter, retaining" />
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div>
+        <label>DWG file</label>
+        <input id="dwgFile" type="file" accept=".dwg" />
+      </div>
+      <div>
+        <label>PNG preview file</label>
+        <input id="pngFile" type="file" accept=".png,image/png" />
+      </div>
+    </div>
+
+    <div class="grid1">
+      <div class="small" id="modalMsg" style="color:var(--muted);"></div>
+      <div class="small">
+        Stored in IndexedDB (local to this browser). Clearing site data deletes it.
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 (() => {
-  // ===================== CONFIG =====================
-  // Default URL used if user hasn't set one yet.
-  // Replace this with your GitHub Pages URL:
-  //   https://<user>.github.io/<repo>/library.json
-  const DEFAULT_LIBRARY_URL = "https://bendbartley.github.io/dwg-library/library.json";
+  // -------------------- IndexedDB wrapper --------------------
+  const DB_NAME = "DwgLibraryDb";
+  const DB_VER = 3; // bmp -> png
+  const STORE = "items";
 
-  const LIBRARY_URL_KEY = "dwg_library_url";
-
-  // Where requests should go
-  const REQUEST_EMAIL_TO = "ben@lalli.com.au";
-  const REQUEST_EMAIL_CC = ""; // optional
-  // ==================================================
-
-  function getLibraryUrl(){
-    return localStorage.getItem(LIBRARY_URL_KEY) || DEFAULT_LIBRARY_URL;
+  function openDb(){
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, DB_VER);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(STORE)){
+          db.createObjectStore(STORE, { keyPath: "id" });
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
   }
-  function setLibraryUrl(url){
-    localStorage.setItem(LIBRARY_URL_KEY, url);
+
+  async function withStore(mode, fn){
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, mode);
+      const store = tx.objectStore(STORE);
+      fn(store);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
   }
 
-  // UI
+  function id(){
+    return (crypto?.randomUUID?.() || (Date.now().toString(16) + Math.random().toString(16).slice(2)));
+  }
+
+  async function putItem(item){ await withStore("readwrite", (s) => s.put(item)); }
+
+  async function getItem(itemId){
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, "readonly");
+      const req = tx.objectStore(STORE).get(itemId);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function getAllItems(){
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, "readonly");
+      const req = tx.objectStore(STORE).getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function deleteItem(itemId){ await withStore("readwrite", (s) => s.delete(itemId)); }
+  async function wipeDb(){ await withStore("readwrite", (s) => s.clear()); }
+
+  // -------------------- UI --------------------
   const resultsEl = document.getElementById("results");
   const statusLine = document.getElementById("statusLine");
   const countLine = document.getElementById("countLine");
   const searchBox = document.getElementById("searchBox");
   const resetBtn = document.getElementById("resetBtn");
-  const reloadBtn = document.getElementById("reloadBtn");
-
-  const libraryUrlBox = document.getElementById("libraryUrlBox");
-  const setLibraryUrlBtn = document.getElementById("setLibraryUrlBtn");
-  const libHint = document.getElementById("libHint");
 
   const titleEl = document.getElementById("title");
   const metaEl = document.getElementById("meta");
   const previewHost = document.getElementById("previewHost");
   const kwWrap = document.getElementById("kwWrap");
-
+  const kwInput = document.getElementById("kwInput");
+  const addKwBtn = document.getElementById("addKwBtn");
   const warnEl = document.getElementById("warn");
   const infoEl = document.getElementById("info");
-
   const downloadDwgBtn = document.getElementById("downloadDwgBtn");
-  const requestEditBtn = document.getElementById("requestEditBtn");
-  const requestNewBtn = document.getElementById("requestNewBtn");
+  const deleteItemBtn = document.getElementById("deleteItemBtn");
 
-  // Viewer controls
+  const addItemBtn = document.getElementById("addItemBtn");
+  const exportBtn = document.getElementById("exportBtn");
+  const wipeBtn = document.getElementById("wipeBtn");
+
+  const modalBackdrop = document.getElementById("modalBackdrop");
+  const closeModalBtn = document.getElementById("closeModalBtn");
+  const saveItemBtn = document.getElementById("saveItemBtn");
+  const nameInput = document.getElementById("nameInput");
+  const keywordsInput = document.getElementById("keywordsInput");
+  const dwgFile = document.getElementById("dwgFile");
+  const pngFile = document.getElementById("pngFile");
+  const modalMsg = document.getElementById("modalMsg");
+
   const zoomInBtn = document.getElementById("zoomInBtn");
   const zoomOutBtn = document.getElementById("zoomOutBtn");
-  const resetViewBtn = document.getElementById("resetViewBtn");
   const centerBtn = document.getElementById("centerBtn");
+  const resetViewBtn = document.getElementById("resetViewBtn");
   const rotLeftBtn = document.getElementById("rotLeftBtn");
   const rotRightBtn = document.getElementById("rotRightBtn");
 
-  // State
   let items = [];
   let filtered = [];
   let activeId = null;
+  let activeBlobUrls = [];
 
-  // ====== Image viewer state ======
+  // -------- Viewer state (pan/zoom/rotate) --------
   let view = {
     scale: 1,
     minScale: 0.05,
     maxScale: 20,
     tx: 0,
     ty: 0,
-    rot: 0,
+    rot: 0, // degrees
     imgW: 0,
     imgH: 0
   };
@@ -312,45 +436,24 @@
 
   let drag = { active:false, startX:0, startY:0, startTx:0, startTy:0 };
 
-  function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
-  function norm(s){ return (s ?? "").toString().trim().toLowerCase(); }
-
-  function showWarn(msg){ warnEl.style.display="block"; warnEl.textContent=msg; }
-  function hideWarn(){ warnEl.style.display="none"; }
-  function showInfo(msg){ infoEl.style.display="block"; infoEl.textContent=msg; }
-  function hideInfo(){ infoEl.style.display="none"; }
-
-  function escapeHtml(s){
-    return (s ?? "").toString()
-      .replaceAll("&","&amp;")
-      .replaceAll("<","&lt;")
-      .replaceAll(">","&gt;")
-      .replaceAll('"',"&quot;")
-      .replaceAll("'","&#039;");
-  }
-
-  function clearPreview(text){
-    previewHost.innerHTML = "";
-    previewHost.style.display = "flex";
-    previewHost.style.alignItems = "center";
-    previewHost.style.justifyContent = "center";
-    previewHost.style.color = "#667";
-    previewHost.textContent = text || "";
-    viewportEl = null; stageEl = null; currentImgEl = null;
-  }
-
-  function setPreviewElement(el){
-    previewHost.innerHTML = "";
-    previewHost.style.display = "block";
-    previewHost.style.color = "inherit";
-    previewHost.appendChild(el);
-  }
+  function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
 
   function applyTransform(){
     if (!stageEl) return;
     stageEl.style.transform = `translate(${view.tx}px, ${view.ty}px) rotate(${view.rot}deg) scale(${view.scale})`;
   }
 
+  function rotatedBounds(iw, ih, rotDeg){
+    const rad = rotDeg * Math.PI / 180;
+    const cos = Math.abs(Math.cos(rad));
+    const sin = Math.abs(Math.sin(rad));
+    return {
+      w: iw * cos + ih * sin,
+      h: iw * sin + ih * cos
+    };
+  }
+
+  // Correct fit: accounts for rotation by fitting rotated bounding box
   function fitToViewport(){
     if (!viewportEl || !currentImgEl) return;
     const vw = viewportEl.clientWidth;
@@ -359,31 +462,37 @@
     const iw = view.imgW || currentImgEl.naturalWidth || 1;
     const ih = view.imgH || currentImgEl.naturalHeight || 1;
 
-    const s = Math.min(vw / iw, vh / ih) * 0.98;
+    const rb = rotatedBounds(iw, ih, view.rot);
+
+    const s = Math.min(vw / rb.w, vh / rb.h) * 0.98;
     view.scale = clamp(s, view.minScale, view.maxScale);
 
-    view.tx = (vw - iw * view.scale) / 2;
-    view.ty = (vh - ih * view.scale) / 2;
+    view.tx = (vw - rb.w * view.scale) / 2;
+    view.ty = (vh - rb.h * view.scale) / 2;
 
     applyTransform();
   }
 
-  function centerOnly(){
+  // Correct center: accounts for rotation, keeps current scale/rotation
+  function centerView(){
     if (!viewportEl || !currentImgEl) return;
-
     const vw = viewportEl.clientWidth;
     const vh = viewportEl.clientHeight;
 
     const iw = view.imgW || currentImgEl.naturalWidth || 1;
     const ih = view.imgH || currentImgEl.naturalHeight || 1;
 
-    view.tx = (vw - iw * view.scale) / 2;
-    view.ty = (vh - ih * view.scale) / 2;
+    const rb = rotatedBounds(iw, ih, view.rot);
+
+    view.tx = (vw - rb.w * view.scale) / 2;
+    view.ty = (vh - rb.h * view.scale) / 2;
+
     applyTransform();
   }
 
   function zoomAt(clientX, clientY, factor){
     if (!viewportEl) return;
+
     const rect = viewportEl.getBoundingClientRect();
     const px = clientX - rect.left;
     const py = clientY - rect.top;
@@ -392,6 +501,7 @@
     const newScale = clamp(oldScale * factor, view.minScale, view.maxScale);
     if (newScale === oldScale) return;
 
+    // Keep point under cursor stationary (approx, ignores rotation coupling)
     view.tx = px - (px - view.tx) * (newScale / oldScale);
     view.ty = py - (py - view.ty) * (newScale / oldScale);
     view.scale = newScale;
@@ -402,7 +512,8 @@
   function setRotation(deg){
     view.rot = ((deg % 360) + 360) % 360;
     if (view.rot > 180) view.rot -= 360;
-    applyTransform();
+    // After rotation, keep things centered (people expect this)
+    centerView();
   }
 
   function resetView(){
@@ -448,115 +559,78 @@
       zoomAt(e.clientX, e.clientY, factor);
     }, { passive:false });
 
-    const ro = new ResizeObserver(() => { applyTransform(); });
+    const ro = new ResizeObserver(() => {
+      // When viewport changes size, just re-center to avoid drift
+      centerView();
+    });
     ro.observe(viewport);
   }
 
-  function previewPngUrl(url, name){
-    try{
-      const viewport = document.createElement("div");
-      viewport.className = "previewViewport";
-      viewportEl = viewport;
+  // -------------------- Helpers --------------------
+  function norm(s){ return (s ?? "").toString().trim().toLowerCase(); }
 
-      const stage = document.createElement("div");
-      stage.className = "previewStage";
-      stageEl = stage;
-
-      const img = document.createElement("img");
-      img.className = "previewImage";
-      img.src = url;
-      img.alt = name || "PNG preview";
-      currentImgEl = img;
-
-      img.onload = () => {
-        view.imgW = img.naturalWidth;
-        view.imgH = img.naturalHeight;
-        showInfo(`Previewing: ${name || "PNG"}`);
-        resetView();
-      };
-      img.onerror = () => {
-        clearPreview("Could not render PNG preview.");
-        showWarn("PNG failed to load. URL may be wrong or blocked.");
-      };
-
-      stage.appendChild(img);
-      viewport.appendChild(stage);
-      setPreviewElement(viewport);
-      wireViewerInteractions(viewport);
-    } catch (e){
-      clearPreview("Could not render PNG preview.");
-      showWarn(e?.message || String(e));
-    }
+  function tokenizeKeywords(s){
+    return (s ?? "")
+      .toString()
+      .split(/[,]+|\s+/)
+      .map(norm)
+      .filter(Boolean);
   }
 
-  // ===================== Data loading =====================
-  async function loadLibrary(){
-    hideWarn(); hideInfo();
+  function showWarn(msg){
+    warnEl.style.display = "block";
+    warnEl.textContent = msg;
+  }
+  function hideWarn(){ warnEl.style.display = "none"; }
 
-    const libUrl = getLibraryUrl();
-    statusLine.textContent = `Loading library.json… (${libUrl})`;
+  function showInfo(msg){
+    infoEl.style.display = "block";
+    infoEl.textContent = msg;
+  }
+  function hideInfo(){ infoEl.style.display = "none"; }
 
-    try{
-      const res = await fetch(libUrl, { cache: "no-store" });
-      if (!res.ok) throw new Error(`Failed to load library.json (HTTP ${res.status})`);
-
-      const data = await res.json();
-      if (!Array.isArray(data)) throw new Error("library.json must be an array.");
-
-      items = data
-        .map(x => ({
-          id: (x.id ?? "").toString().trim(),
-          name: (x.name ?? "").toString().trim(),
-          keywords: Array.isArray(x.keywords) ? x.keywords.map(norm).filter(Boolean) : [],
-          png: (x.png ?? "").toString().trim(),
-          dwg: (x.dwg ?? "").toString().trim(),
-          updatedUtc: (x.updatedUtc ?? "").toString().trim()
-        }))
-        .filter(x => x.id && x.png && x.dwg);
-
-      statusLine.textContent = `Loaded ${items.length} items`;
-      applyFilter();
-
-      if (items.length){
-        const pick = items.find(x => x.id === activeId) || items[0];
-        await selectItem(pick.id);
-      } else {
-        activeId = null;
-        titleEl.textContent = "No item selected";
-        metaEl.textContent = "";
-        downloadDwgBtn.style.display = "none";
-        requestEditBtn.style.display = "none";
-        kwWrap.innerHTML = "";
-        clearPreview("No items found in library.json.");
-      }
-
-      libHint.style.display = "block";
-      libHint.textContent = "Tip: this URL is saved on this device (localStorage).";
-    } catch (e){
-      statusLine.textContent = "Load failed";
-      showWarn(e?.message || String(e));
-
-      items = [];
-      filtered = [];
-      resultsEl.innerHTML = "";
-      countLine.textContent = "";
-      clearPreview("Could not load library.json.");
-
-      libHint.style.display = "block";
-      libHint.textContent = "If this HTML is opened as file:/// and fetch is blocked, serve it via a local web server.";
-    }
+  function clearPreview(text){
+    previewHost.innerHTML = "";
+    previewHost.style.display = "flex";
+    previewHost.style.alignItems = "center";
+    previewHost.style.justifyContent = "center";
+    previewHost.style.color = "#667";
+    previewHost.textContent = text || "";
+    viewportEl = null; stageEl = null; currentImgEl = null;
   }
 
+  function setPreviewElement(el){
+    previewHost.innerHTML = "";
+    previewHost.style.display = "block";
+    previewHost.style.color = "inherit";
+    previewHost.appendChild(el);
+  }
+
+  function cleanupBlobUrls(){
+    for (const u of activeBlobUrls) URL.revokeObjectURL(u);
+    activeBlobUrls = [];
+  }
+
+  function escapeHtml(s){
+    return (s ?? "").toString()
+      .replaceAll("&","&amp;")
+      .replaceAll("<","&lt;")
+      .replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;")
+      .replaceAll("'","&#039;");
+  }
+
+  // -------------------- Search + list --------------------
   function applyFilter(){
     const q = norm(searchBox.value);
     const tokens = q.split(/\s+/).filter(Boolean);
 
-    if (!tokens.length){
-      filtered = [...items].sort((a,b)=> (a.name||"").localeCompare(b.name||""));
+    if (tokens.length === 0){
+      filtered = [...items].sort((a,b) => (a.name||"").localeCompare(b.name||""));
     } else {
       filtered = items
         .map(it => {
-          const hay = (it.id + " " + it.name + " " + (it.keywords||[]).join(" ")).toLowerCase();
+          const hay = (it.name + " " + (it.keywords||[]).join(" ")).toLowerCase();
           let score = 0;
           for (const t of tokens){
             if ((it.keywords||[]).some(k => k.includes(t))) score += 3;
@@ -565,7 +639,7 @@
           return { it, score };
         })
         .filter(x => x.score > 0)
-        .sort((a,b)=> b.score - a.score || (a.it.name||"").localeCompare(b.it.name||""))
+        .sort((a,b) => b.score - a.score || (a.it.name||"").localeCompare(b.it.name||""))
         .map(x => x.it);
     }
 
@@ -575,7 +649,7 @@
 
   function renderResults(){
     resultsEl.innerHTML = "";
-    if (!filtered.length){
+    if (filtered.length === 0){
       const d = document.createElement("div");
       d.className = "result";
       d.style.cursor = "default";
@@ -588,13 +662,10 @@
       const row = document.createElement("div");
       row.className = "result" + (it.id === activeId ? " active" : "");
       row.addEventListener("click", () => selectItem(it.id));
-
       const kwPrev = (it.keywords || []).slice(0, 6).join(", ");
       row.innerHTML = `
-        <div class="rtitle">${escapeHtml(it.name || it.id)}</div>
+        <div class="rtitle">${escapeHtml(it.name || "Untitled")}</div>
         <div class="rmeta">
-          <span>${escapeHtml(it.id)}</span>
-          <span>•</span>
           <span>${(it.keywords||[]).length} keywords</span>
           <span>•</span>
           <span>${escapeHtml(kwPrev || "none")}${(it.keywords||[]).length>6 ? "…" : ""}</span>
@@ -604,151 +675,299 @@
     }
   }
 
+  // -------------------- Load + render selection --------------------
+  async function refresh(){
+    statusLine.textContent = "Loading local database…";
+    items = await getAllItems();
+    items = items.map(it => ({
+      ...it,
+      keywords: Array.from(new Set((it.keywords||[]).map(norm).filter(Boolean))).sort()
+    }));
+    statusLine.textContent = `Loaded ${items.length} items`;
+    applyFilter();
+
+    if (!activeId && items.length){
+      await selectItem(items[0].id);
+    }
+    if (items.length === 0){
+      activeId = null;
+      titleEl.textContent = "No item selected";
+      metaEl.textContent = "";
+      downloadDwgBtn.style.display = "none";
+      deleteItemBtn.style.display = "none";
+      kwWrap.innerHTML = "";
+      clearPreview("Add an item to begin.");
+    }
+  }
+
   function renderKeywords(it){
     kwWrap.innerHTML = "";
     const kws = it.keywords || [];
-    if (!kws.length){
+    if (kws.length === 0){
       const s = document.createElement("div");
       s.className = "small";
-      s.textContent = "No keywords.";
+      s.textContent = "No keywords yet. Add one.";
       kwWrap.appendChild(s);
       return;
     }
+
     for (const k of kws){
       const chip = document.createElement("div");
       chip.className = "kw";
-      chip.textContent = k;
+      chip.innerHTML = `<span>${escapeHtml(k)}</span>`;
+      const del = document.createElement("button");
+      del.type = "button";
+      del.textContent = "×";
+      del.title = "Remove keyword";
+      del.addEventListener("click", async () => {
+        const next = (it.keywords || []).filter(x => x !== k);
+        it.keywords = next;
+        await putItem(it);
+        await refresh();
+        await selectItem(it.id);
+      });
+      chip.appendChild(del);
       kwWrap.appendChild(chip);
     }
   }
 
+  async function addKeyword(){
+    if (!activeId) return;
+    const k = norm(kwInput.value);
+    if (!k) return;
+
+    const it = await getItem(activeId);
+    if (!it) return;
+
+    it.keywords = Array.from(new Set([...(it.keywords||[]), k])).sort();
+    await putItem(it);
+    kwInput.value = "";
+    await refresh();
+    await selectItem(it.id);
+  }
+
   async function selectItem(itemId){
     hideWarn(); hideInfo();
+    cleanupBlobUrls();
+
     activeId = itemId;
     renderResults();
 
-    const it = items.find(x => x.id === itemId);
+    const it = await getItem(itemId);
     if (!it){
-      showWarn("Item not found.");
+      showWarn("Item missing. Your DB is inconsistent.");
       return;
     }
 
-    titleEl.textContent = it.name || it.id;
+    titleEl.textContent = it.name || "Untitled";
     metaEl.textContent =
-      `ID: ${it.id} | Updated: ${it.updatedUtc ? new Date(it.updatedUtc).toLocaleString() : "unknown"}`;
+      `DWG: ${it.dwgName || "dwg"} | PNG: ${it.pngName || "png"} | Added: ${new Date(it.createdUtc).toLocaleString()}`;
 
+    deleteItemBtn.style.display = "inline-block";
     downloadDwgBtn.style.display = "inline-block";
-    requestEditBtn.style.display = "inline-block";
 
+    renderKeywords(it);
+    previewPngBlob(it.pngBlob, it.pngName);
+    setupDownload(it.dwgBlob, it.dwgName || (it.name || "drawing") + ".dwg");
+  }
+
+  function setupDownload(dwgBlob, filename){
     downloadDwgBtn.onclick = () => {
+      const url = URL.createObjectURL(dwgBlob);
+      activeBlobUrls.push(url);
       const a = document.createElement("a");
-      a.href = it.dwg;
-      a.download = (it.id || "drawing") + ".dwg";
+      a.href = url;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       a.remove();
     };
-
-    requestEditBtn.onclick = () => openRequestEmail("edit", it);
-
-    renderKeywords(it);
-    previewPngUrl(it.png, it.id + ".png");
   }
 
-  // ===================== Mailto requests =====================
-  function encodeMailto(s){ return encodeURIComponent(s).replace(/%20/g, "+"); }
+  function previewPngBlob(pngBlob, pngName){
+    try{
+      const url = URL.createObjectURL(pngBlob);
+      activeBlobUrls.push(url);
 
-  function openRequestEmail(kind, it){
-    if (!REQUEST_EMAIL_TO || REQUEST_EMAIL_TO.includes("YOUR_EMAIL_HERE")){
-      showWarn("Set REQUEST_EMAIL_TO in the viewer HTML first.");
+      const viewport = document.createElement("div");
+      viewport.className = "previewViewport";
+      viewportEl = viewport;
+
+      const stage = document.createElement("div");
+      stage.className = "previewStage";
+      stageEl = stage;
+
+      const img = document.createElement("img");
+      img.className = "previewImage";
+      img.src = url;
+      img.alt = pngName || "PNG preview";
+      currentImgEl = img;
+
+      img.onload = () => {
+        view.imgW = img.naturalWidth;
+        view.imgH = img.naturalHeight;
+        showInfo(`Previewing: ${pngName || "PNG"}`);
+        resetView();
+      };
+
+      img.onerror = () => {
+        clearPreview("Could not render PNG preview.");
+        showWarn("PNG failed to load. File may be corrupt or not actually a PNG.");
+      };
+
+      stage.appendChild(img);
+      viewport.appendChild(stage);
+      setPreviewElement(viewport);
+      wireViewerInteractions(viewport);
+
+    } catch (err){
+      clearPreview("Could not render PNG preview.");
+      showWarn("PNG preview failed: " + (err?.message || err));
+    }
+  }
+
+  // -------------------- Modal logic --------------------
+  function openModal(){
+    modalMsg.textContent = "";
+    nameInput.value = "";
+    keywordsInput.value = "";
+    dwgFile.value = "";
+    pngFile.value = "";
+    modalBackdrop.style.display = "flex";
+  }
+
+  function closeModal(){ modalBackdrop.style.display = "none"; }
+
+  async function saveNewItem(){
+    hideWarn(); hideInfo();
+    modalMsg.textContent = "";
+
+    const name = nameInput.value.trim() || "Untitled";
+    const kws = tokenizeKeywords(keywordsInput.value);
+
+    const dwg = dwgFile.files?.[0] || null;
+    const png = pngFile.files?.[0] || null;
+
+    if (!dwg || !/\.dwg$/i.test(dwg.name)){
+      modalMsg.style.color = "var(--bad)";
+      modalMsg.textContent = "Pick a .dwg file.";
+      return;
+    }
+    if (!png || !/\.png$/i.test(png.name)){
+      modalMsg.style.color = "var(--bad)";
+      modalMsg.textContent = "Pick a .png file.";
       return;
     }
 
-    const subject =
-      kind === "new"
-        ? "DWG Library request: new item"
-        : `DWG Library request: edit (${it?.id || "unknown"})`;
+    const item = {
+      id: id(),
+      name,
+      keywords: Array.from(new Set(kws)).sort(),
+      createdUtc: new Date().toISOString(),
+      dwgName: dwg.name,
+      pngName: png.name,
+      dwgBlob: dwg,
+      pngBlob: png
+    };
 
-    const lines = [];
-    lines.push(`Request type: ${kind}`);
-    lines.push(`Submitted: ${new Date().toISOString()}`);
-    lines.push("");
-
-    if (kind === "edit" && it){
-      lines.push("Existing item:");
-      lines.push(`- id: ${it.id}`);
-      lines.push(`- name: ${it.name}`);
-      lines.push(`- keywords: ${(it.keywords||[]).join(", ")}`);
-      lines.push(`- png: ${it.png}`);
-      lines.push(`- dwg: ${it.dwg}`);
-      lines.push("");
-      lines.push("Requested changes (fill in):");
-      lines.push("- What should change?");
-      lines.push("- New/updated keywords:");
-      lines.push("- Replacement PNG/DWG:");
-      lines.push("  - Attach files to this email OR paste links (R2/Dropbox/etc).");
-    } else {
-      lines.push("New item details (fill in):");
-      lines.push("- Proposed id:");
-      lines.push("- Name:");
-      lines.push("- Keywords:");
-      lines.push("- PNG: attach file OR link");
-      lines.push("- DWG: attach file OR link");
+    try{
+      await putItem(item);
+      modalMsg.style.color = "var(--muted)";
+      modalMsg.textContent = "Saved.";
+      closeModal();
+      await refresh();
+      await selectItem(item.id);
+      showInfo("Item added to local database.");
+    } catch (err){
+      modalMsg.style.color = "var(--bad)";
+      modalMsg.textContent = "Failed to save: " + (err?.message || err);
     }
-
-    lines.push("");
-    lines.push("Note: mailto cannot reliably auto-attach files across email clients.");
-    lines.push("If you want files included, attach them manually or provide a link.");
-
-    const body = lines.join("\n");
-    const params = [];
-    params.push(`subject=${encodeMailto(subject)}`);
-    params.push(`body=${encodeMailto(body)}`);
-    if (REQUEST_EMAIL_CC) params.push(`cc=${encodeMailto(REQUEST_EMAIL_CC)}`);
-
-    window.location.href = `mailto:${encodeURIComponent(REQUEST_EMAIL_TO)}?${params.join("&")}`;
   }
 
-  // ===================== Wire controls =====================
-  reloadBtn.addEventListener("click", loadLibrary);
+  // -------------------- Export metadata --------------------
+  async function exportJson(){
+    const all = await getAllItems();
+    const meta = all.map(x => ({
+      id: x.id,
+      name: x.name,
+      keywords: x.keywords,
+      createdUtc: x.createdUtc,
+      dwgName: x.dwgName,
+      pngName: x.pngName
+    }));
+    const blob = new Blob([JSON.stringify(meta, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "dwg-library-metadata.json";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+    showInfo("Exported metadata JSON (not files).");
+  }
+
+  // -------------------- Wire events --------------------
+  addItemBtn.addEventListener("click", openModal);
+  closeModalBtn.addEventListener("click", closeModal);
+  modalBackdrop.addEventListener("click", (e) => { if (e.target === modalBackdrop) closeModal(); });
+  saveItemBtn.addEventListener("click", saveNewItem);
+
+  exportBtn.addEventListener("click", exportJson);
+
+  wipeBtn.addEventListener("click", async () => {
+    cleanupBlobUrls();
+    await wipeDb();
+    activeId = null;
+    showWarn("Local DB wiped.");
+    await refresh();
+  });
+
+  deleteItemBtn.addEventListener("click", async () => {
+    if (!activeId) return;
+    cleanupBlobUrls();
+    await deleteItem(activeId);
+    showWarn("Item deleted.");
+    activeId = null;
+    await refresh();
+  });
+
   searchBox.addEventListener("input", applyFilter);
   resetBtn.addEventListener("click", () => { searchBox.value=""; applyFilter(); });
 
-  setLibraryUrlBtn.addEventListener("click", () => {
-    hideWarn();
-    const u = (libraryUrlBox.value || "").trim();
-    if (!u){
-      showWarn("Paste a library.json URL.");
-      return;
-    }
-    try{ new URL(u); }
-    catch { showWarn("That is not a valid URL."); return; }
-
-    setLibraryUrl(u);
-    loadLibrary();
+  addKwBtn.addEventListener("click", addKeyword);
+  kwInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter"){ e.preventDefault(); addKeyword(); }
   });
 
-  requestNewBtn.addEventListener("click", () => openRequestEmail("new", null));
-
-  zoomInBtn.addEventListener("click", () => {
+  zoomInBtn?.addEventListener("click", () => {
     if (!viewportEl) return;
     const rect = viewportEl.getBoundingClientRect();
     zoomAt(rect.left + rect.width/2, rect.top + rect.height/2, 1.25);
   });
-  zoomOutBtn.addEventListener("click", () => {
+
+  zoomOutBtn?.addEventListener("click", () => {
     if (!viewportEl) return;
     const rect = viewportEl.getBoundingClientRect();
     zoomAt(rect.left + rect.width/2, rect.top + rect.height/2, 0.8);
   });
-  resetViewBtn.addEventListener("click", resetView);
-  centerBtn.addEventListener("click", centerOnly);
-  rotLeftBtn.addEventListener("click", () => setRotation(view.rot - 90));
-  rotRightBtn.addEventListener("click", () => setRotation(view.rot + 90));
 
-  // Boot
-  libraryUrlBox.value = getLibraryUrl();
-  clearPreview("Loading…");
-  loadLibrary();
+  centerBtn?.addEventListener("click", () => centerView());
+  resetViewBtn?.addEventListener("click", () => resetView());
+
+  rotLeftBtn?.addEventListener("click", () => setRotation(view.rot - 90));
+  rotRightBtn?.addEventListener("click", () => setRotation(view.rot + 90));
+
+  // -------------------- Boot --------------------
+  (async () => {
+    try{
+      await refresh();
+      clearPreview(items.length ? "Select an item to preview its PNG." : "Add an item to begin.");
+    } catch (err){
+      statusLine.textContent = "DB init failed";
+      showWarn("IndexedDB failed: " + (err?.message || err));
+    }
+  })();
 })();
 </script>
 </body>
