@@ -138,20 +138,24 @@
     }
     .previewViewport.dragging{ cursor:grabbing; }
 
-    /* Key change: stage sits at viewport centre; rotation origin is image centre */
+    /* stage only pans (translate) */
     .previewStage{
       position:absolute;
-      left:50%;
-      top:50%;
-      transform-origin:center center;
+      left:0;
+      top:0;
       will-change: transform;
     }
+
+    /* NEW: rotation+scale wrapper rotates around image center */
+    .previewXform{
+      display:inline-block;
+      transform-origin: center center;
+      will-change: transform;
+    }
+
     .previewImage{
       display:block;
       pointer-events:none;
-      user-select:none;
-      /* anchor image centre to stage centre */
-      transform: translate(-50%, -50%);
     }
 
     .footerBar{display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:space-between; margin-top:10px;}
@@ -246,7 +250,6 @@
         <button id="zoomOutBtn" class="secondary mini">−</button>
         <button id="zoomInBtn" class="secondary mini">+</button>
         <button id="centerBtn" class="secondary mini">Center</button>
-        <button id="fitBtn" class="secondary mini">Fit</button>
         <button id="resetViewBtn" class="secondary mini">Reset</button>
         <button id="rotLeftBtn" class="secondary mini">⟲ 90°</button>
         <button id="rotRightBtn" class="secondary mini">⟳ 90°</button>
@@ -321,7 +324,6 @@
 
 <script>
 (() => {
-  // -------------------- IndexedDB wrapper --------------------
   const DB_NAME = "DwgLibraryDb";
   const DB_VER = 3;
   const STORE = "items";
@@ -381,7 +383,6 @@
   async function deleteItem(itemId){ await withStore("readwrite", (s) => s.delete(itemId)); }
   async function wipeDb(){ await withStore("readwrite", (s) => s.clear()); }
 
-  // -------------------- UI --------------------
   const resultsEl = document.getElementById("results");
   const statusLine = document.getElementById("statusLine");
   const countLine = document.getElementById("countLine");
@@ -415,7 +416,6 @@
   const zoomInBtn = document.getElementById("zoomInBtn");
   const zoomOutBtn = document.getElementById("zoomOutBtn");
   const centerBtn = document.getElementById("centerBtn");
-  const fitBtn = document.getElementById("fitBtn");
   const resetViewBtn = document.getElementById("resetViewBtn");
   const rotLeftBtn = document.getElementById("rotLeftBtn");
   const rotRightBtn = document.getElementById("rotRightBtn");
@@ -425,12 +425,12 @@
   let activeId = null;
   let activeBlobUrls = [];
 
-  // -------- Viewer state (centre-origin) --------
+  // Viewer state
   let view = {
     scale: 1,
     minScale: 0.05,
     maxScale: 20,
-    tx: 0,     // translation relative to stage anchor at viewport centre
+    tx: 0,
     ty: 0,
     rot: 0,
     imgW: 0,
@@ -439,37 +439,29 @@
 
   let viewportEl = null;
   let stageEl = null;
+  let xformEl = null;   // NEW
   let currentImgEl = null;
 
   let drag = { active:false, startX:0, startY:0, startTx:0, startTy:0 };
 
   function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
 
+  // CHANGED: translate on stage, rotate/scale on xform (which rotates around image center)
   function applyTransform(){
-    if (!stageEl) return;
-    // stage is anchored at viewport centre (50%/50%)
-    stageEl.style.transform = `translate(${view.tx}px, ${view.ty}px) rotate(${view.rot}deg) scale(${view.scale})`;
+    if (!stageEl || !xformEl) return;
+    stageEl.style.transform = `translate(${view.tx}px, ${view.ty}px)`;
+    xformEl.style.transform = `rotate(${view.rot}deg) scale(${view.scale})`;
   }
 
   function rotatedBounds(iw, ih, rotDeg){
     const rad = rotDeg * Math.PI / 180;
     const cos = Math.abs(Math.cos(rad));
     const sin = Math.abs(Math.sin(rad));
-    return {
-      w: iw * cos + ih * sin,
-      h: iw * sin + ih * cos
-    };
-  }
-
-  function centerView(){
-    view.tx = 0;
-    view.ty = 0;
-    applyTransform();
+    return { w: iw * cos + ih * sin, h: iw * sin + ih * cos };
   }
 
   function fitToViewport(){
     if (!viewportEl || !currentImgEl) return;
-
     const vw = viewportEl.clientWidth;
     const vh = viewportEl.clientHeight;
 
@@ -481,16 +473,26 @@
     const s = Math.min(vw / rb.w, vh / rb.h) * 0.98;
     view.scale = clamp(s, view.minScale, view.maxScale);
 
-    // keep centred
-    view.tx = 0;
-    view.ty = 0;
+    view.tx = (vw - rb.w * view.scale) / 2;
+    view.ty = (vh - rb.h * view.scale) / 2;
 
     applyTransform();
   }
 
-  function resetView(){
-    view.rot = 0;
-    fitToViewport();
+  function centerView(){
+    if (!viewportEl || !currentImgEl) return;
+    const vw = viewportEl.clientWidth;
+    const vh = viewportEl.clientHeight;
+
+    const iw = view.imgW || currentImgEl.naturalWidth || 1;
+    const ih = view.imgH || currentImgEl.naturalHeight || 1;
+
+    const rb = rotatedBounds(iw, ih, view.rot);
+
+    view.tx = (vw - rb.w * view.scale) / 2;
+    view.ty = (vh - rb.h * view.scale) / 2;
+
+    applyTransform();
   }
 
   function zoomAt(clientX, clientY, factor){
@@ -500,30 +502,26 @@
     const px = clientX - rect.left;
     const py = clientY - rect.top;
 
-    const cx = rect.width / 2;
-    const cy = rect.height / 2;
-
     const oldScale = view.scale;
     const newScale = clamp(oldScale * factor, view.minScale, view.maxScale);
     if (newScale === oldScale) return;
 
-    // Cursor position relative to viewport centre
-    const dx = px - cx;
-    const dy = py - cy;
-
-    // Keep point under cursor stable (screen space)
-    view.tx = dx + (view.tx - dx) * (newScale / oldScale);
-    view.ty = dy + (view.ty - dy) * (newScale / oldScale);
-
+    view.tx = px - (px - view.tx) * (newScale / oldScale);
+    view.ty = py - (py - view.ty) * (newScale / oldScale);
     view.scale = newScale;
+
     applyTransform();
   }
 
   function setRotation(deg){
     view.rot = ((deg % 360) + 360) % 360;
     if (view.rot > 180) view.rot -= 360;
-    // Rotation about centre, so no drift. Fit remains correct if you choose it.
-    applyTransform();
+    centerView();
+  }
+
+  function resetView(){
+    view.rot = 0;
+    fitToViewport();
   }
 
   function wireViewerInteractions(viewport){
@@ -564,15 +562,10 @@
       zoomAt(e.clientX, e.clientY, factor);
     }, { passive:false });
 
-    const ro = new ResizeObserver(() => {
-      // Keep stable on resize: just re-fit (or you can keep scale and just center)
-      // Safer default for usability:
-      fitToViewport();
-    });
+    const ro = new ResizeObserver(() => centerView());
     ro.observe(viewport);
   }
 
-  // -------------------- Helpers --------------------
   function norm(s){ return (s ?? "").toString().trim().toLowerCase(); }
 
   function tokenizeKeywords(s){
@@ -602,7 +595,7 @@
     previewHost.style.justifyContent = "center";
     previewHost.style.color = "#667";
     previewHost.textContent = text || "";
-    viewportEl = null; stageEl = null; currentImgEl = null;
+    viewportEl = null; stageEl = null; xformEl = null; currentImgEl = null;
   }
 
   function setPreviewElement(el){
@@ -626,7 +619,6 @@
       .replaceAll("'","&#039;");
   }
 
-  // -------------------- Search + list --------------------
   function applyFilter(){
     const q = norm(searchBox.value);
     const tokens = q.split(/\s+/).filter(Boolean);
@@ -681,7 +673,6 @@
     }
   }
 
-  // -------------------- Load + render selection --------------------
   async function refresh(){
     statusLine.textContent = "Loading local database…";
     items = await getAllItems();
@@ -803,6 +794,11 @@
       stage.className = "previewStage";
       stageEl = stage;
 
+      // NEW wrapper that rotates around center
+      const xform = document.createElement("div");
+      xform.className = "previewXform";
+      xformEl = xform;
+
       const img = document.createElement("img");
       img.className = "previewImage";
       img.src = url;
@@ -821,8 +817,10 @@
         showWarn("PNG failed to load. File may be corrupt or not actually a PNG.");
       };
 
-      stage.appendChild(img);
+      xform.appendChild(img);
+      stage.appendChild(xform);
       viewport.appendChild(stage);
+
       setPreviewElement(viewport);
       wireViewerInteractions(viewport);
 
@@ -832,7 +830,6 @@
     }
   }
 
-  // -------------------- Modal logic --------------------
   function openModal(){
     modalMsg.textContent = "";
     nameInput.value = "";
@@ -890,7 +887,6 @@
     }
   }
 
-  // -------------------- Export metadata --------------------
   async function exportJson(){
     const all = await getAllItems();
     const meta = all.map(x => ({
@@ -913,7 +909,6 @@
     showInfo("Exported metadata JSON (not files).");
   }
 
-  // -------------------- Wire events --------------------
   addItemBtn.addEventListener("click", openModal);
   closeModalBtn.addEventListener("click", closeModal);
   modalBackdrop.addEventListener("click", (e) => { if (e.target === modalBackdrop) closeModal(); });
@@ -959,13 +954,11 @@
   });
 
   centerBtn?.addEventListener("click", () => centerView());
-  fitBtn?.addEventListener("click", () => fitToViewport());
   resetViewBtn?.addEventListener("click", () => resetView());
 
   rotLeftBtn?.addEventListener("click", () => setRotation(view.rot - 90));
   rotRightBtn?.addEventListener("click", () => setRotation(view.rot + 90));
 
-  // -------------------- Boot --------------------
   (async () => {
     try{
       await refresh();
