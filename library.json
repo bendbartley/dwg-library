@@ -2,10 +2,13 @@
   {
     "id": "a1e0167f-67ca-4e39-9fd7-0623684dc213",
     "name": "Untitled",
-    "keywords": [],
-    "pngUrl": "",
+    "keywords": [
+      "test",
+      "timber"
+    ],
+    "pngUrl": "https://pub-38ef2b46002048cca5df22c19de6f3e0.r2.dev/png/97d0a347-6bb7-46b5-9f92-700098daddf6_Screenshot_2025-01-13_203947.png",
     "dwgUrl": "",
-    "updatedUtc": "2026-01-17T09:21:20.382Z"
+    "updatedUtc": "2026-01-17T09:25:40.975Z"
   },
   {
     "id": "test_drawing",
