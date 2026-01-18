@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>DWG Library Viewer (GitHub + Worker + R2)</title>
+  <title>DWG Library Viewer (Worker + R2 + Requests)</title>
   <style>
     :root{
       --bg:#0b0d10; --panel:#12161c;
@@ -39,7 +39,7 @@
       box-shadow: 0 12px 40px rgba(0,0,0,.25);
     }
     .stack{display:flex; flex-direction:column; gap:10px;}
-    input, button{
+    input, button, textarea, select{
       font:inherit;
       color:var(--text);
       background:rgba(10,12,15,.9);
@@ -48,7 +48,15 @@
       padding:10px 10px;
       outline:none;
     }
-    input:focus, button:focus{border-color: rgba(110,231,255,.55); box-shadow: 0 0 0 3px rgba(110,231,255,.12);}
+    textarea{
+      min-height:110px;
+      resize:vertical;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    }
+    input:focus, button:focus, textarea:focus, select:focus{
+      border-color: rgba(110,231,255,.55);
+      box-shadow: 0 0 0 3px rgba(110,231,255,.12);
+    }
     button{
       cursor:pointer;
       background:linear-gradient(180deg, rgba(110,231,255,.16), rgba(110,231,255,.06));
@@ -58,6 +66,7 @@
     button.danger{background:linear-gradient(180deg, rgba(255,110,110,.18), rgba(255,110,110,.06)); border-color: rgba(255,110,110,.35);}
     .btnrow{display:flex; gap:8px; flex-wrap:wrap;}
     .small{font-size:12px; color:var(--muted); line-height:1.4;}
+    .label{font-size:12px; color:var(--muted); margin-bottom:6px; display:block;}
     .results{margin-top:10px; border:1px solid var(--border); border-radius:12px; overflow:hidden;}
     .result{
       padding:10px 10px;
@@ -96,7 +105,7 @@
     .viewerControls .mini{padding:8px 10px; font-size:12px;}
     .previewViewport{
       width:100%;
-      height: calc(100vh - 240px);
+      height: calc(100vh - 280px);
       min-height:420px;
       overflow:hidden;
       position:relative;
@@ -106,14 +115,13 @@
     }
     .previewViewport.dragging{cursor:grabbing;}
 
-    /* Stage is centered around (0,0) */
+    /* Stage origin is image center */
     .previewStage{
       position:absolute;
       left:0; top:0;
       transform-origin: 0 0;
       will-change: transform;
     }
-    /* Image is positioned so its center is at stage origin */
     .previewImage{
       position:absolute;
       left:0; top:0;
@@ -122,10 +130,34 @@
       pointer-events:none;
     }
 
+    /* Modal */
+    .modalBackdrop{
+      position:fixed; inset:0;
+      background:rgba(0,0,0,.55);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      padding:16px;
+      z-index:999;
+    }
+    .modal{
+      width:min(760px, 100%);
+      border:1px solid var(--border);
+      border-radius:14px;
+      background:linear-gradient(180deg, rgba(18,22,28,.96), rgba(15,19,24,.96));
+      box-shadow: 0 20px 80px rgba(0,0,0,.55);
+      padding:14px;
+    }
+    .grid2{display:grid; grid-template-columns: 1fr 1fr; gap:10px;}
+    .grid1{display:grid; grid-template-columns: 1fr; gap:10px;}
+    .row2{display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between;}
+    code{color:var(--accent)}
+
     @media (max-width: 980px){
       .wrap{grid-template-columns: 1fr;}
       .left{border-right:none; border-bottom:1px solid var(--border);}
       .previewViewport{height:60vh;}
+      .grid2{grid-template-columns:1fr;}
     }
   </style>
 </head>
@@ -134,10 +166,12 @@
   <div class="row">
     <div>
       <h1>DWG Library (Viewer)</h1>
-      <div class="sub">Loads JSON via Worker, files from R2. No local DB. No magic.</div>
+      <div class="sub">Loads JSON via Worker, files from R2. Requests go to <code>/requests</code>.</div>
     </div>
     <div class="btnrow">
       <button id="reloadBtn" class="secondary" title="Reload library.json from Worker (no-cache)">Reload</button>
+      <button id="requestNewBtn" class="secondary" title="Request a new item be added">Request new item</button>
+      <button id="requestEditBtn" class="secondary" style="display:none;" title="Request edits to selected item">Request edit</button>
     </div>
   </div>
 </header>
@@ -206,14 +240,73 @@
   </main>
 </div>
 
+<!-- Request modal -->
+<div class="modalBackdrop" id="modalBackdrop">
+  <div class="modal">
+    <div class="row2">
+      <div>
+        <div class="fileTitle" style="font-size:14px;font-weight:700;" id="reqModalTitle">Send request</div>
+        <div class="small" id="reqModalSub">This creates a request entry in KV. No uploads. No secrets.</div>
+      </div>
+      <div class="btnrow">
+        <button id="closeModalBtn" class="secondary">Cancel</button>
+        <button id="sendReqBtn">Send request</button>
+      </div>
+    </div>
+
+    <div class="grid2" style="margin-top:10px;">
+      <div>
+        <label class="label">Request type</label>
+        <select id="reqType">
+          <option value="new">New item</option>
+          <option value="edit">Edit existing item</option>
+        </select>
+      </div>
+      <div>
+        <label class="label">Existing item ID (only for edit)</label>
+        <input id="reqItemId" placeholder="e.g. rw-detail-01" />
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div>
+        <label class="label">Your name</label>
+        <input id="reqByName" placeholder="e.g. Ben" />
+      </div>
+      <div>
+        <label class="label">Your email (optional)</label>
+        <input id="reqByEmail" placeholder="e.g. ben@example.com" />
+      </div>
+    </div>
+
+    <div class="grid1">
+      <div>
+        <label class="label">Item name</label>
+        <input id="reqName" placeholder="e.g. Planter retaining wall" />
+      </div>
+      <div>
+        <label class="label">Keywords (comma or space separated)</label>
+        <input id="reqKeywords" placeholder="masonry, retaining, planter" />
+      </div>
+      <div>
+        <label class="label">Notes (include links to DWG/PNG if you have them)</label>
+        <textarea id="reqNotes" placeholder="What should change? Where are the files? Anything helpful..."></textarea>
+      </div>
+      <div class="small" id="reqStatus" style="color:var(--muted);"></div>
+      <div class="notice" id="reqWarn" style="display:none;"></div>
+      <div class="notice ok" id="reqOk" style="display:none;"></div>
+    </div>
+  </div>
+</div>
+
 <script>
 (() => {
   // ================== CONFIG ==================
   // PASTE WORKER BASE HERE (no trailing slash)
-  const WORKER_BASE = "https://dwg-library-admin-worker.bendbartley.workers.dev"; // <-- change if needed
+  const WORKER_BASE = "https://dwg-library-admin-worker.bendbartley.workers.dev";
 
-  // Viewer loads JSON ONLY from Worker, never directly from GitHub.
-  const LIBRARY_URL = `${WORKER_BASE}/library`;
+  const LIBRARY_URL  = `${WORKER_BASE}/library`;
+  const REQUESTS_URL = `${WORKER_BASE}/requests`;
 
   // ================== UI refs ==================
   const resultsEl = document.getElementById("results");
@@ -232,6 +325,9 @@
   const infoEl = document.getElementById("info");
   const downloadDwgLink = document.getElementById("downloadDwgLink");
 
+  const requestNewBtn = document.getElementById("requestNewBtn");
+  const requestEditBtn = document.getElementById("requestEditBtn");
+
   const zoomInBtn = document.getElementById("zoomInBtn");
   const zoomOutBtn = document.getElementById("zoomOutBtn");
   const centerBtn = document.getElementById("centerBtn");
@@ -239,6 +335,22 @@
   const resetViewBtn = document.getElementById("resetViewBtn");
   const rotLeftBtn = document.getElementById("rotLeftBtn");
   const rotRightBtn = document.getElementById("rotRightBtn");
+
+  // Modal refs
+  const modalBackdrop = document.getElementById("modalBackdrop");
+  const closeModalBtn = document.getElementById("closeModalBtn");
+  const sendReqBtn = document.getElementById("sendReqBtn");
+  const reqTypeEl = document.getElementById("reqType");
+  const reqItemIdEl = document.getElementById("reqItemId");
+  const reqByNameEl = document.getElementById("reqByName");
+  const reqByEmailEl = document.getElementById("reqByEmail");
+  const reqNameEl = document.getElementById("reqName");
+  const reqKeywordsEl = document.getElementById("reqKeywords");
+  const reqNotesEl = document.getElementById("reqNotes");
+  const reqStatusEl = document.getElementById("reqStatus");
+  const reqWarnEl = document.getElementById("reqWarn");
+  const reqOkEl = document.getElementById("reqOk");
+  const reqModalTitle = document.getElementById("reqModalTitle");
 
   // ================== State ==================
   let items = [];
@@ -271,6 +383,11 @@
   function showInfo(msg){ infoEl.style.display="block"; infoEl.textContent=msg; }
   function hideInfo(){ infoEl.style.display="none"; }
 
+  function showReqWarn(msg){ reqWarnEl.style.display="block"; reqWarnEl.textContent=msg; }
+  function hideReqWarn(){ reqWarnEl.style.display="none"; }
+  function showReqOk(msg){ reqOkEl.style.display="block"; reqOkEl.textContent=msg; }
+  function hideReqOk(){ reqOkEl.style.display="none"; }
+
   function escapeHtml(s){
     return (s ?? "").toString()
       .replaceAll("&","&amp;")
@@ -278,6 +395,14 @@
       .replaceAll(">","&gt;")
       .replaceAll('"',"&quot;")
       .replaceAll("'","&#039;");
+  }
+
+  function tokenizeKeywords(s){
+    return (s ?? "")
+      .toString()
+      .split(/[,]+|\s+/)
+      .map(norm)
+      .filter(Boolean);
   }
 
   function clearPreview(text){
@@ -308,7 +433,6 @@
 
   function applyTransform(){
     if (!stageEl) return;
-    // stage origin is the image center; translate puts that origin somewhere in viewport
     stageEl.style.transform = `translate(${view.tx}px, ${view.ty}px) rotate(${view.rot}deg) scale(${view.scale})`;
   }
 
@@ -346,8 +470,6 @@
     const newScale = clamp(oldScale * factor, view.minScale, view.maxScale);
     if (newScale === oldScale) return;
 
-    // Keep point under cursor stable (translation only; rotation stays same)
-    // Treat stage origin position as view.tx/view.ty
     view.tx = px - (px - view.tx) * (newScale / oldScale);
     view.ty = py - (py - view.ty) * (newScale / oldScale);
     view.scale = newScale;
@@ -358,7 +480,6 @@
   function setRotation(deg){
     view.rot = ((deg % 360) + 360) % 360;
     if (view.rot > 180) view.rot -= 360;
-    // keep image centered in viewport after rotation
     centerView();
   }
 
@@ -415,9 +536,7 @@
     statusLine.textContent = "Loading library…";
     srcLine.textContent = `Source: ${LIBRARY_URL}`;
 
-    // Bust any caches aggressively
-    const bust = `cb=${Date.now()}`;
-    const url = LIBRARY_URL + (LIBRARY_URL.includes("?") ? "&" : "?") + bust;
+    const url = LIBRARY_URL + (LIBRARY_URL.includes("?") ? "&" : "?") + `cb=${Date.now()}`;
 
     const res = await fetch(url, {
       cache: "no-store",
@@ -430,11 +549,9 @@
     }
 
     const json = await res.json();
-    // Accept either array or { items: [...] }
     const list = Array.isArray(json) ? json : (json?.items || []);
     if (!Array.isArray(list)) throw new Error("library.json is not an array (or {items:[]})");
 
-    // Normalize
     items = list.map((it, idx) => ({
       id: (it.id ?? `item_${idx}`).toString(),
       name: (it.name ?? "Untitled").toString(),
@@ -449,6 +566,7 @@
 
     if (items.length === 0){
       activeId = null;
+      requestEditBtn.style.display = "none";
       titleEl.textContent = "No item selected";
       metaEl.textContent = "";
       downloadDwgLink.style.display = "none";
@@ -545,12 +663,15 @@
 
     const it = items.find(x => x.id === itemId);
     if (!it){
+      requestEditBtn.style.display = "none";
       showWarn("Item missing from current list.");
       return;
     }
 
+    requestEditBtn.style.display = "inline-block";
+
     titleEl.textContent = it.name || "Untitled";
-    metaEl.textContent = `PNG: ${it.pngUrl ? "yes" : "missing"} | DWG: ${it.dwgUrl ? "yes" : "missing"}${it.updatedUtc ? " | Updated: " + it.updatedUtc : ""}`;
+    metaEl.textContent = `ID: ${it.id} | PNG: ${it.pngUrl ? "yes" : "missing"} | DWG: ${it.dwgUrl ? "yes" : "missing"}${it.updatedUtc ? " | Updated: " + it.updatedUtc : ""}`;
 
     renderKeywords(it);
 
@@ -597,7 +718,9 @@
         showWarn("PNG failed to load. Check the R2 URL and CORS headers.");
       };
 
-      img.src = pngUrl;
+      // Cache-bust preview too (R2 is usually fine, but browsers are not)
+      const src = pngUrl + (pngUrl.includes("?") ? "&" : "?") + `cb=${Date.now()}`;
+      img.src = src;
 
       stage.appendChild(img);
       viewport.appendChild(stage);
@@ -607,6 +730,120 @@
     } catch (err){
       clearPreview("Could not render PNG preview.");
       showWarn("PNG preview failed: " + (err?.message || err));
+    }
+  }
+
+  // ================== Requests UI ==================
+  function openModal(kind){
+    hideReqWarn(); hideReqOk();
+    reqStatusEl.textContent = "";
+
+    const selected = items.find(x => x.id === activeId) || null;
+
+    if (kind === "new"){
+      reqModalTitle.textContent = "Request: New item";
+      reqTypeEl.value = "new";
+      reqItemIdEl.value = "";
+      reqNameEl.value = "";
+      reqKeywordsEl.value = "";
+      reqNotesEl.value = "";
+      reqItemIdEl.disabled = true;
+    } else {
+      reqModalTitle.textContent = "Request: Edit item";
+      reqTypeEl.value = "edit";
+      reqItemIdEl.value = selected?.id || "";
+      reqNameEl.value = selected?.name || "";
+      reqKeywordsEl.value = (selected?.keywords || []).join(", ");
+      reqNotesEl.value = "";
+      reqItemIdEl.disabled = false;
+    }
+
+    modalBackdrop.style.display = "flex";
+    setReqTypeUI();
+  }
+
+  function closeModal(){
+    modalBackdrop.style.display = "none";
+  }
+
+  function setReqTypeUI(){
+    const t = reqTypeEl.value;
+    if (t === "edit"){
+      reqItemIdEl.disabled = false;
+    } else {
+      reqItemIdEl.disabled = true;
+      reqItemIdEl.value = "";
+    }
+  }
+
+  async function sendRequest(){
+    hideReqWarn(); hideReqOk();
+    reqStatusEl.textContent = "Sending…";
+
+    const type = (reqTypeEl.value || "").toLowerCase();
+    if (type !== "new" && type !== "edit"){
+      showReqWarn("Request type must be new or edit.");
+      reqStatusEl.textContent = "";
+      return;
+    }
+
+    const byName = (reqByNameEl.value || "").trim();
+    const byEmail = (reqByEmailEl.value || "").trim();
+
+    if (!byName){
+      showReqWarn("Please enter your name.");
+      reqStatusEl.textContent = "";
+      return;
+    }
+
+    const itemId = (reqItemIdEl.value || "").trim();
+    if (type === "edit" && !itemId){
+      showReqWarn("Edit requests must include an existing item ID.");
+      reqStatusEl.textContent = "";
+      return;
+    }
+
+    const itemName = (reqNameEl.value || "").trim();
+    const keywords = tokenizeKeywords(reqKeywordsEl.value);
+    const notes = (reqNotesEl.value || "").trim();
+
+    const payload = {
+      type,
+      requestedBy: { name: byName, email: byEmail },
+      item: {
+        id: itemId,
+        name: itemName,
+        keywords
+      },
+      notes
+    };
+
+    try{
+      const res = await fetch(REQUESTS_URL, {
+        method: "POST",
+        headers: { "Content-Type":"application/json" },
+        body: JSON.stringify(payload),
+        cache: "no-store"
+      });
+
+      const text = await res.text();
+      let data = null;
+      try{ data = JSON.parse(text); } catch {}
+
+      if (!res.ok){
+        showReqWarn(`Request failed (${res.status}): ${text.slice(0, 300)}`);
+        reqStatusEl.textContent = "";
+        return;
+      }
+
+      const id = data?.id || "(no id returned)";
+      showReqOk(`Request submitted. ID: ${id}`);
+      reqStatusEl.textContent = "";
+
+      // keep modal open so user can copy id, then close if they want
+    } catch (e){
+      showReqWarn(String(e?.message || e));
+      reqStatusEl.textContent = "";
     }
   }
 
@@ -633,9 +870,16 @@
   centerBtn.addEventListener("click", () => centerView());
   fitBtn.addEventListener("click", () => fitToViewport());
   resetViewBtn.addEventListener("click", () => resetView());
-
   rotLeftBtn.addEventListener("click", () => setRotation(view.rot - 90));
   rotRightBtn.addEventListener("click", () => setRotation(view.rot + 90));
+
+  // Requests modal wiring
+  requestNewBtn.addEventListener("click", () => openModal("new"));
+  requestEditBtn.addEventListener("click", () => openModal("edit"));
+  closeModalBtn.addEventListener("click", closeModal);
+  modalBackdrop.addEventListener("click", (e) => { if (e.target === modalBackdrop) closeModal(); });
+  reqTypeEl.addEventListener("change", setReqTypeUI);
+  sendReqBtn.addEventListener("click", sendRequest);
 
   // ================== Boot ==================
   (async () => {
