@@ -1,5 +1,18 @@
 [
   {
+    "id": "308d7649-ec36-43b4-92fc-6f006006d8e0",
+    "name": "STRUTTING BEAM / UNDERPURLIN TO SUSPENDED SLAB DETAILS",
+    "keywords": [
+      "holding down",
+      "strutting",
+      "suspended slab",
+      "underpurlin"
+    ],
+    "pngUrl": "https://pub-38ef2b46002048cca5df22c19de6f3e0.r2.dev/png/35c57d49-7e5e-4261-8a24-0d830f9f99c1_Screenshot_2026-01-19_081118.png",
+    "dwgUrl": "https://pub-38ef2b46002048cca5df22c19de6f3e0.r2.dev/dwg/833cdec3-0bf7-440d-911d-abbfd11e6938_STRUTTING_BEAM_UNDERPURLIN_TO_SUSPENDED_SLAB_DETAILS.dwg",
+    "updatedUtc": "2026-01-19T00:17:28.208Z"
+  },
+  {
     "id": "179b5ac1-d179-4cf9-b076-890cd3e258ee",
     "name": "Retaining test",
     "keywords": [
