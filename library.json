@@ -22,38 +22,5 @@
     "pngUrl": "https://pub-38ef2b46002048cca5df22c19de6f3e0.r2.dev/png/35c57d49-7e5e-4261-8a24-0d830f9f99c1_Screenshot_2026-01-19_081118.png",
     "dwgUrl": "https://pub-38ef2b46002048cca5df22c19de6f3e0.r2.dev/dwg/833cdec3-0bf7-440d-911d-abbfd11e6938_STRUTTING_BEAM_UNDERPURLIN_TO_SUSPENDED_SLAB_DETAILS.dwg",
     "updatedUtc": "2026-01-19T00:17:28.208Z"
-  },
-  {
-    "id": "179b5ac1-d179-4cf9-b076-890cd3e258ee",
-    "name": "Retaining test",
-    "keywords": [
-      "masonry",
-      "test3"
-    ],
-    "pngUrl": "",
-    "dwgUrl": "",
-    "updatedUtc": "2026-01-18T22:18:02.664Z"
-  },
-  {
-    "id": "d88abc35-c6bb-4db1-9507-9eb329d0a811",
-    "name": "Untitled2",
-    "keywords": [
-      "cadversion",
-      "test3"
-    ],
-    "pngUrl": "https://pub-38ef2b46002048cca5df22c19de6f3e0.r2.dev/png/32e08a69-6aac-4891-8ce1-a3f3c2c0d93d_Screenshot_2026-01-17_173641.png",
-    "dwgUrl": "",
-    "updatedUtc": "2026-01-17T09:37:34.770Z"
-  },
-  {
-    "id": "test_drawing",
-    "name": "test",
-    "keywords": [
-      "masonry",
-      "test"
-    ],
-    "pngUrl": "https://pub-38ef2b46002048cca5df22c19de6f3e0.r2.dev/png/test_drawing.png",
-    "dwgUrl": "https://pub-38ef2b46002048cca5df22c19de6f3e0.r2.dev/dwg/test_drawing.dwg",
-    "updatedUtc": "2026-01-15T23:43:13.548Z"
   }
 ]
