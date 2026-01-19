@@ -1,5 +1,19 @@
 [
   {
+    "id": "5d7933c9-1da1-4e4e-a283-d67dc7438a99",
+    "name": "STEEL RIDGE TO CRANKED BEAM",
+    "keywords": [
+      "cantilever",
+      "cranked beam",
+      "holding down",
+      "ridge",
+      "steel"
+    ],
+    "pngUrl": "https://pub-38ef2b46002048cca5df22c19de6f3e0.r2.dev/png/695245fb-da2c-4d6e-8cf9-47b30bbcdc84_STEEL_RIDGE_TO_CRANKED_BEAM.png",
+    "dwgUrl": "https://pub-38ef2b46002048cca5df22c19de6f3e0.r2.dev/dwg/01e0adb4-cf35-4400-8ed2-06bcbf28939f_STEEL_RIDGE_TO_CRANKED_BEAM.dwg",
+    "updatedUtc": "2026-01-19T07:30:11.492Z"
+  },
+  {
     "id": "12495327-72dd-4b32-831a-ddd5ce07daa1",
     "name": "CAST IN CHANNEL BALUSTRADE DETAIL",
     "keywords": [
