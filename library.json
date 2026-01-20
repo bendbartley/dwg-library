@@ -1,5 +1,19 @@
 [
   {
+    "id": "ae3b653f-e00e-4ead-acd0-461b3122626d",
+    "name": "GARAGE ATTACHED PIER DETAIL",
+    "keywords": [
+      "garage",
+      "masonry",
+      "novus",
+      "pier",
+      "pitching"
+    ],
+    "pngUrl": "https://pub-38ef2b46002048cca5df22c19de6f3e0.r2.dev/png/c78f1355-e1b7-4f11-879d-b2b94ad0dacb_GARAGE_ATTACHED_PIER_DETAIL.png",
+    "dwgUrl": "https://pub-38ef2b46002048cca5df22c19de6f3e0.r2.dev/dwg/d9a62f0c-7609-4f67-b444-0d2d2b086261_GARAGE_ATTACHED_PIER_DETAIL.dwg",
+    "updatedUtc": "2026-01-20T04:14:46.130Z"
+  },
+  {
     "id": "5d7933c9-1da1-4e4e-a283-d67dc7438a99",
     "name": "STEEL RIDGE TO CRANKED BEAM",
     "keywords": [
