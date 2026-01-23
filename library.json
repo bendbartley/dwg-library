@@ -1,5 +1,18 @@
 [
   {
+    "id": "af25770c-32ff-49ba-8561-989b788859b1",
+    "name": "CANTILEVER RAFTER TO RIDGE SUPPORT",
+    "keywords": [
+      "cantilever",
+      "rafter",
+      "ridge",
+      "roof"
+    ],
+    "pngUrl": "https://pub-38ef2b46002048cca5df22c19de6f3e0.r2.dev/png/e6e12447-687c-4e9b-a9a8-1ee5e21748b8_CANTILEVER_RAFTER_TO_RIDGE_SUPPORT.png",
+    "dwgUrl": "https://pub-38ef2b46002048cca5df22c19de6f3e0.r2.dev/dwg/afdf4a5e-07f7-4623-af30-57af1a8408fd_CANTILEVER_RAFTER_TO_RIDGE_SUPPORT.dwg",
+    "updatedUtc": "2026-01-23T00:29:22.710Z"
+  },
+  {
     "id": "ae3b653f-e00e-4ead-acd0-461b3122626d",
     "name": "GARAGE ATTACHED PIER DETAIL",
     "keywords": [
