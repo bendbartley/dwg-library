@@ -1,5 +1,41 @@
 [
   {
+    "id": "c8335b86-febc-47b6-82c8-6cfcf1f903c0",
+    "name": "Slab Thickening to Brickwork",
+    "keywords": [
+      "ground slab",
+      "masonry",
+      "retaining wall"
+    ],
+    "pngUrl": "https://pub-38ef2b46002048cca5df22c19de6f3e0.r2.dev/png/b6d96986-2dbd-4364-b735-3e71f86eff39_slab_edge_to_brickwork.png",
+    "dwgUrl": "https://pub-38ef2b46002048cca5df22c19de6f3e0.r2.dev/dwg/74b9062c-78c2-4fc6-9d62-6496cb17fb32_slab_edge_to_brickwork.dwg",
+    "updatedUtc": "2026-02-09T06:36:48.099Z"
+  },
+  {
+    "id": "74a947ec-e9e0-493b-9bbb-9e1f6f9b7884",
+    "name": "Single Leaf Stairs Balustrade",
+    "keywords": [
+      "balustrade",
+      "masonry",
+      "stairs"
+    ],
+    "pngUrl": "https://pub-38ef2b46002048cca5df22c19de6f3e0.r2.dev/png/02394c4b-0b73-412d-805b-a675bd55a853_single_leaf_stairs_balustrade.png",
+    "dwgUrl": "https://pub-38ef2b46002048cca5df22c19de6f3e0.r2.dev/dwg/9989b1cf-4974-45cf-ad9c-72d5a2ffe6ad_single_leaf_stairs_balustrade.dwg",
+    "updatedUtc": "2026-02-09T06:35:42.100Z"
+  },
+  {
+    "id": "525fad93-60d9-4ae1-852d-90eb57eba7f3",
+    "name": "External Leaf Waling Plate",
+    "keywords": [
+      "holding down",
+      "parapet",
+      "waling plate"
+    ],
+    "pngUrl": "https://pub-38ef2b46002048cca5df22c19de6f3e0.r2.dev/png/fd9290c6-d549-4513-9e50-822e9b2e5af2_external_leaf_patio_-_no_plate_hold_down.png",
+    "dwgUrl": "https://pub-38ef2b46002048cca5df22c19de6f3e0.r2.dev/dwg/5ff1f074-5e9e-43e5-9fe5-71dd75e08d0d_external_leaf_patio_-_no_plate_hold_down.dwg",
+    "updatedUtc": "2026-02-09T06:34:56.368Z"
+  },
+  {
     "id": "6b074a54-ad9f-4f96-9d9f-e55f9107b58e",
     "name": "TIMBER BOX GUTTER BEAM",
     "keywords": [
